@@ -1,0 +1,67 @@
+{
+  "timestamp": "2026-11-05T21:36:48+00:00",
+  "runs": [
+    {
+      "target": "noiseless",
+      "alias": "aer",
+      "shots": 1000,
+      "counts": {
+        "00": 491,
+        "11": 509
+      },
+      "ok": true
+    },
+    {
+      "target": "fake",
+      "alias": "IQMFakeGarnetBackend",
+      "mock": false,
+      "price": 0.0,
+      "queue": null,
+      "shots": 1000,
+      "counts": {
+        "11": 475,
+        "00": 472,
+        "10": 28,
+        "01": 25
+      },
+      "check": "bell_correlated>=0.8",
+      "ok": true,
+      "job_id": "cd105725-f1fd-4ea6-8de2-c3460de3f25b"
+    },
+    {
+      "target": "mock",
+      "alias": "garnet:mock",
+      "mock": true,
+      "price": 0.0,
+      "queue": 0,
+      "shots": 1000,
+      "counts": {
+        "01": 250,
+        "10": 267,
+        "00": 231,
+        "11": 252
+      },
+      "check": "all_shots_returned",
+      "ok": true,
+      "job_id": "01a1ada4-c4b5-7306-b751-6f218f6658fa"
+    }
+  ],
+  "status": [
+    {
+      "alias": "garnet",
+      "mock": false,
+      "qubits": 20,
+      "price": 0.5,
+      "queue": 21,
+      "ready": true
+    },
+    {
+      "alias": "garnet:mock",
+      "mock": true,
+      "qubits": 20,
+      "price": 0.0,
+      "queue": 0,
+      "ready": true
+    }
+  ]
+}

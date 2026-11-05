@@ -62,3 +62,27 @@ def test_emerald_stays_blocked():
     states = [state("emerald", qubits=54)]
     with pytest.raises(RuntimeError, match="no real machine"):
         select_backend(ghz(3), target="qpu", machine="emerald", get_states=lambda: states, get_backend=lambda a: None)
+
+
+def test_bell_counts_ok_accepts_correlated_outcomes_and_rejects_the_rest():
+    from qlmaml.hardware import bell_counts_ok
+
+    assert bell_counts_ok({"00": 470, "11": 480, "01": 30, "10": 20})  # 95 % correlated
+    assert not bell_counts_ok({"00": 250, "01": 250, "10": 250, "11": 250})  # uniform: no entanglement
+    assert not bell_counts_ok({})  # nothing came back
+
+
+def test_bell_circuit_runs_on_fake_garnet():
+    from qlmaml.hardware import bell_circuit, bell_counts_ok
+
+    backend, transpiled, _ = select_backend(bell_circuit(), target="fake")
+    counts = backend.run(transpiled, shots=500, seed_simulator=1).result().get_counts()
+    assert bell_counts_ok(counts)
+
+
+def test_mock_counts_ok_needs_every_shot_back_as_two_bits():
+    from qlmaml.hardware import mock_counts_ok
+
+    assert mock_counts_ok({"00": 250, "01": 250, "10": 250, "11": 250}, shots=1000)  # random is fine
+    assert not mock_counts_ok({"00": 10}, shots=1000)  # shots lost
+    assert not mock_counts_ok({"000": 1000}, shots=1000)  # wrong register width
