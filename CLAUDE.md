@@ -29,7 +29,7 @@ See `README.md` for the dataset description and `literature/README.md` for the r
   - Run anything: `uv run python ...`, `uv run pytest`, `uv run jupyter lab`.
 - Python 3.12 (pinned in `.python-version`; uv would otherwise pick the newest interpreter), polars for data, XGBoost for the classical baseline, PennyLane for circuits. Add PyTorch Geometric only if we actually train a GNN.
 - IBM's `snapml` (Graph Feature Preprocessor) has no Windows/py3.12 wheel, so motif features live in `src/qlmaml/features.py`. Extend that file rather than adding a new feature module.
-- Reusable code goes in `src/qlmaml/`, runnable experiments in `scripts/`, exploration in `notebooks/` (runnable top to bottom). Each experiment writes a JSON to `results/<dataset>/`.
+- Reusable code goes in `src/qlmaml/`, runnable experiments in `scripts/`, exploration in `notebooks/` (runnable top to bottom). **Every experiment records itself with `qlmaml.tracking.record_run(result, dataset=..., model=..., note=...)`**, which appends to `results/runs.jsonl`, writes `results/<dataset>/<model>_<timestamp>.json` and regenerates the leaderboard `results/README.md`. Always pass a `note` saying what changed. Commit those files with the experiment. Never edit `results/README.md` by hand.
 - `uv run pytest` must pass before committing. `uv run python scripts/baseline.py --fake` is the end-to-end smoke test (synthetic data, never report its numbers).
 
 ## Quantum hardware: IQM Garnet on IQM Resonance

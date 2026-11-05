@@ -82,7 +82,8 @@ You need a Kaggle API token in `~/.kaggle/kaggle.json`. You can also download th
 │   └── fake_data.py     #   tiny synthetic file in the same format, for smoke tests only
 ├── scripts/baseline.py  # Classical baseline: features + XGBoost on a temporal split
 ├── tests/               # pytest
-├── results/<dataset>/   # Metrics JSON per run (committed; FAKE-* runs are ignored)
+├── results/             # Experiment tracking: runs.jsonl (one row per run), README.md leaderboard,
+│   └── <dataset>/       #   and the full JSON (+ log) of every run. Committed; FAKE-* runs are ignored.
 ├── literature/          # Key papers on the dataset, AML graph ML, and quantum ML (links + notes)
 └── data/                # Local only, git-ignored (raw/ and processed/)
 ```
@@ -118,7 +119,10 @@ The script does a day-based 60/20/20 temporal split (same recipe as IBM's Multi-
 per-transaction features from each account's recent activity (fan-in, fan-out, unique counterparties,
 amounts, 2- and 3-cycles), trains XGBoost with early stopping on validation, picks the threshold on
 validation, and reports PR-AUC, minority-class F1 and recall at 0.1% / 1% FPR on test.
-Results go to `results/<dataset>/baseline_xgb.json`.
+Every run is appended to `results/runs.jsonl` and to the leaderboard in
+[`results/README.md`](results/README.md); the full result goes to `results/<dataset>/<model>_<timestamp>.json`.
+Pass `--note "what changed"` so the leaderboard row is meaningful. Any new experiment script should
+call `qlmaml.tracking.record_run(...)` the same way.
 
 ### Baseline results so far
 

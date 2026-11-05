@@ -5,12 +5,13 @@ Usage:
     python scripts/baseline.py --fake            # smoke test on synthetic data
     python scripts/baseline.py data/raw/HI-Small_Trans.csv --n-rows 1000000 --no-cycles
 
-Writes metrics and feature importances to results/<dataset>/baseline_xgb.json.
+Every run is recorded in results/runs.jsonl and the leaderboard results/README.md
+(see qlmaml.tracking); the full result goes to results/<dataset>/xgboost_<timestamp>.json.
+Use --note to say what changed in this run.
 """
 from __future__ import annotations
 
 import argparse
-import json
 import time
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from qlmaml.data import describe, load_transactions, temporal_split
 from qlmaml.fake_data import write_fake_transactions
 from qlmaml.features import build_features, feature_matrix
 from qlmaml.metrics import evaluate
+from qlmaml.tracking import record_run
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,6 +36,8 @@ def main() -> None:
     ap.add_argument("--no-cycles", action="store_true", help="skip the 3-cycle feature (faster)")
     ap.add_argument("--windows", default="1d,7d")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--note", default="", help="what changed in this run (shown in the leaderboard)")
+    ap.add_argument("--n-estimators", type=int, default=2000)
     args = ap.parse_args()
 
     if args.fake:
@@ -43,8 +47,6 @@ def main() -> None:
     else:
         ap.error("give a CSV path or --fake")
     name = csv.stem.replace("_Trans", "")
-    out_dir = ROOT / "results" / name
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     t0 = time.time()
     df = load_transactions(csv, n_rows=args.n_rows)
@@ -66,7 +68,7 @@ def main() -> None:
     # Class weighting instead of resampling: keeps the temporal structure intact.
     spw = float((y[tr] == 0).sum() / max(1, (y[tr] == 1).sum()))
     model = xgb.XGBClassifier(
-        n_estimators=2000,
+        n_estimators=args.n_estimators,
         learning_rate=0.05,
         max_depth=6,
         subsample=0.8,
@@ -91,17 +93,16 @@ def main() -> None:
 
     imp = sorted(zip(cols, model.feature_importances_.tolist()), key=lambda kv: -kv[1])
     result = {
-        "dataset": name,
         "data": info,
         "features": cols,
         "split_days": {"train": len(split.train_days), "val": len(split.val_days), "test": len(split.test_days)},
         "val": val_metrics,
         "test": test_metrics,
         "feature_importance": imp[:25],
-        "model": "xgboost",
+        "best_iteration": int(model.best_iteration),
         "params": {k: v for k, v in model.get_params().items() if v is not None and k != "n_jobs"},
     }
-    (out_dir / "baseline_xgb.json").write_text(json.dumps(result, indent=2, default=str))
+    out_file = record_run(result, dataset=name, model="xgboost", note=args.note)
 
     print("\n=== VAL ===")
     for k, v in val_metrics.items():
@@ -112,7 +113,7 @@ def main() -> None:
     print("\nTop features:")
     for c, w in imp[:12]:
         print(f"  {c:>24}: {w:.4f}")
-    print(f"\nwritten: {out_dir / 'baseline_xgb.json'}")
+    print(f"\nwritten: {out_file}  (leaderboard: results/README.md)")
 
 
 if __name__ == "__main__":

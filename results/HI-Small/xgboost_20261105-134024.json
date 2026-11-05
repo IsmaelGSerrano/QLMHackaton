@@ -1,5 +1,10 @@
 {
+  "run_id": "xgboost_20261105-134024",
   "dataset": "HI-Small",
+  "model": "xgboost",
+  "note": "baseline: 35 activity/motif features (1d,7d windows, 2/3-cycles), 2000 rounds (cap hit), spw=100",
+  "date": "2026-11-05T13:40:24+00:00",
+  "commit": "8057210",
   "data": {
     "transactions": 5078345,
     "laundering": 5177,
@@ -175,7 +180,6 @@
       0.007363585289567709
     ]
   ],
-  "model": "xgboost",
   "params": {
     "objective": "binary:logistic",
     "colsample_bytree": 0.8,
@@ -191,5 +195,6 @@
     "scale_pos_weight": 100.0,
     "subsample": 0.8,
     "tree_method": "hist"
-  }
+  },
+  "best_iteration": 1998
 }
