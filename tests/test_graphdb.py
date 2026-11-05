@@ -1,6 +1,8 @@
 """Offline tests for the Neo4j export (no database needed)."""
 from __future__ import annotations
 
+from datetime import datetime
+
 import polars as pl
 import pytest
 
@@ -94,3 +96,43 @@ def test_subgraph_qubit_mapping():
     simple = g.simple_edges()
     row = simple.filter((pl.col("u") == 0) & (pl.col("v") == 1)).row(0, named=True)
     assert row["n_tx"] == 2 and row["total_paid"] == 3.0 and row["any_laundering"] == 1
+
+
+def test_simple_edges_merge_in_time_order_with_usd_totals():
+    accts = [{"account_id": "1:a", "node_id": 5}, {"account_id": "2:b", "node_id": 9}, {"account_id": "1:c", "node_id": 1}]
+    edges = [
+        {"src": "1:a", "dst": "2:b", "edge_id": 1, "ts": datetime(2022, 9, 1, 10), "amount_paid": 100.0,
+         "payment_currency": "Euro", "is_laundering": 0},
+        {"src": "1:c", "dst": "1:a", "edge_id": 2, "ts": datetime(2022, 9, 1, 9), "amount_paid": 4.0,
+         "payment_currency": "US Dollar", "is_laundering": 0},
+        {"src": "1:a", "dst": "2:b", "edge_id": 3, "ts": datetime(2022, 9, 1, 11), "amount_paid": 10.0,
+         "payment_currency": "US Dollar", "is_laundering": 1},
+    ]
+    g = _subgraph_from_records(accts, edges, center=None)
+    simple = g.simple_edges(usd_rates={"US Dollar": 1.0, "Euro": 1.1})
+    # Ordered by first timestamp: c->a (09:00) before a->b (10:00).
+    assert simple.select("u", "v").rows() == [(2, 0), (0, 1)]
+    ab = simple.row(1, named=True)
+    assert ab["n_tx"] == 2
+    assert ab["first_ts"] == datetime(2022, 9, 1, 10)
+    assert ab["total_usd"] == pytest.approx(120.0)  # 100 EUR * 1.1 + 10 USD
+    assert ab["any_laundering"] == 1
+
+
+def test_simple_edges_ties_broken_by_amount():
+    accts = [{"account_id": x, "node_id": i} for i, x in enumerate(["a", "b", "c", "d"])]
+    t = datetime(2022, 9, 1)
+    edges = [
+        {"src": "a", "dst": "b", "edge_id": 1, "ts": t, "amount_paid": 50.0, "payment_currency": "US Dollar", "is_laundering": 0},
+        {"src": "c", "dst": "d", "edge_id": 2, "ts": t, "amount_paid": 5.0, "payment_currency": "US Dollar", "is_laundering": 0},
+    ]
+    simple = _subgraph_from_records(accts, edges, center=None).simple_edges(usd_rates={"US Dollar": 1.0})
+    assert simple.select("u", "v").rows() == [(2, 3), (0, 1)]
+
+
+def test_simple_edges_unknown_currency_raises():
+    accts = [{"account_id": "a", "node_id": 0}, {"account_id": "b", "node_id": 1}]
+    edges = [{"src": "a", "dst": "b", "edge_id": 1, "ts": datetime(2022, 9, 1), "amount_paid": 1.0,
+              "payment_currency": "Ruble", "is_laundering": 0}]
+    with pytest.raises(KeyError, match="Ruble"):
+        _subgraph_from_records(accts, edges, center=None).simple_edges(usd_rates={"US Dollar": 1.0})

@@ -1,0 +1,162 @@
+{
+  "max_nodes": 8,
+  "ratio": "1:5",
+  "positives": 334,
+  "negatives": 1670,
+  "negatives_by_kind": {
+    "ego": 1399,
+    "pairs": 271
+  },
+  "dropped_positives": 36,
+  "dropped_by_pattern": {
+    "CYCLE": 4,
+    "FAN-IN": 5,
+    "FAN-OUT": 5,
+    "GATHER-SCATTER": 9,
+    "RANDOM": 2,
+    "SCATTER-GATHER": 9,
+    "STACK": 2
+  },
+  "dropped_shapes": [
+    [
+      3,
+      4
+    ],
+    [
+      3,
+      5
+    ],
+    [
+      3,
+      6
+    ],
+    [
+      4,
+      6
+    ],
+    [
+      4,
+      9
+    ],
+    [
+      4,
+      10
+    ],
+    [
+      4,
+      11
+    ],
+    [
+      4,
+      12
+    ],
+    [
+      5,
+      6
+    ],
+    [
+      7,
+      9
+    ],
+    [
+      8,
+      9
+    ],
+    [
+      8,
+      10
+    ],
+    [
+      8,
+      11
+    ],
+    [
+      8,
+      12
+    ]
+  ],
+  "attempts_cut": 171,
+  "per_split": {
+    "train": {
+      "pos": 199,
+      "neg": 995
+    },
+    "val": {
+      "pos": 65,
+      "neg": 325
+    },
+    "test": {
+      "pos": 70,
+      "neg": 350
+    }
+  },
+  "split_start": {
+    "train": "2022-09-01 00:00:00",
+    "val": "2022-09-07 02:35:00",
+    "test": "2022-09-09 10:53:00"
+  },
+  "positives_per_pattern": {
+    "BIPARTITE": 49,
+    "CYCLE": 50,
+    "FAN-IN": 35,
+    "FAN-OUT": 43,
+    "GATHER-SCATTER": 42,
+    "RANDOM": 39,
+    "SCATTER-GATHER": 35,
+    "STACK": 41
+  },
+  "nodes_hist": {
+    "pos": {
+      "2": 88,
+      "3": 23,
+      "4": 14,
+      "5": 8,
+      "6": 7,
+      "7": 22,
+      "8": 172
+    },
+    "neg": {
+      "2": 440,
+      "3": 115,
+      "4": 70,
+      "5": 40,
+      "6": 35,
+      "7": 110,
+      "8": 860
+    }
+  },
+  "edges_hist": {
+    "pos": {
+      "1": 47,
+      "2": 56,
+      "3": 17,
+      "4": 58,
+      "5": 12,
+      "6": 12,
+      "7": 125,
+      "8": 7
+    },
+    "neg": {
+      "1": 440,
+      "2": 112,
+      "3": 72,
+      "4": 297,
+      "5": 38,
+      "6": 48,
+      "7": 635,
+      "8": 28
+    }
+  },
+  "edge_match_abs_gap": {
+    "0": 1268,
+    "1": 402
+  },
+  "settings": {
+    "edge_tol": 1,
+    "hops": 2,
+    "window_h": 24,
+    "max_tries": 200,
+    "seed": 0,
+    "source": "neo4j"
+  }
+}

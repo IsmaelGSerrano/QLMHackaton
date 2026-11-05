@@ -34,7 +34,10 @@ def write_fake_transactions(
     n_motifs: int = 40,
     n_days: int = 10,
     seed: int = 0,
+    patterns_path: str | Path | None = None,
 ) -> Path:
+    """Write the fake `*_Trans.csv`. With `patterns_path`, also write the planted
+    motifs as a `*_Patterns.txt` (one BEGIN/END block per motif)."""
     rng = np.random.default_rng(seed)
     start = datetime(2022, 9, 1)
     lines = [HEADER]
@@ -48,8 +51,10 @@ def write_fake_transactions(
         lines.append(_row(ts, a, b, float(rng.lognormal(6, 1.2)), rng.choice(FORMATS), 0))
 
     # Planted laundering motifs.
+    blocks: list[str] = []
     for _ in range(n_motifs):
-        kind = rng.choice(["fan-out", "fan-in", "cycle"])
+        first = len(lines)
+        kind = rng.choice(["fan-out", "fan-in", "cycle", "bipartite"])
         base = start + timedelta(minutes=int(rng.integers(0, n_days * 24 * 60 - 600)))
         hub = int(rng.integers(n_accounts))
         others = rng.choice(n_accounts, int(rng.integers(4, 9)), replace=False)
@@ -60,14 +65,22 @@ def write_fake_transactions(
         elif kind == "fan-in":
             for k, o in enumerate(others):
                 lines.append(_row(base + timedelta(minutes=5 * k), int(o), hub, amt / len(others), "ACH", 1))
+        elif kind == "bipartite":  # separate sender -> receiver pairs, as in many HI-Small attempts
+            for k, (a, b) in enumerate(zip(others[0::2], others[1::2])):
+                lines.append(_row(base + timedelta(minutes=5 * k), int(a), int(b), amt / len(others), "ACH", 1))
         else:
             ring = [hub, *map(int, others[:4])]
             for k in range(len(ring)):
                 lines.append(_row(base + timedelta(minutes=20 * k), ring[k], ring[(k + 1) % len(ring)], amt * 0.97**k, "Wire", 1))
+        blocks += [f"BEGIN LAUNDERING ATTEMPT - {kind.upper()}", *lines[first:], "END LAUNDERING ATTEMPT", ""]
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if patterns_path is not None:
+        patterns_path = Path(patterns_path)
+        patterns_path.parent.mkdir(parents=True, exist_ok=True)
+        patterns_path.write_text("\n".join(blocks) + "\n", encoding="utf-8")
     return path
 
 

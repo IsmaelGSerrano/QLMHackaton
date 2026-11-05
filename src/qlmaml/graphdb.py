@@ -35,8 +35,9 @@ files with typed headers; `scripts/neo4j_load.py` runs the import in Docker.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -291,17 +292,36 @@ class Subgraph:
     def n_qubits(self) -> int:
         return self.nodes.height
 
-    def simple_edges(self) -> pl.DataFrame:
-        """Collapse parallel edges: one row per (u, v) with count, total amount and label."""
-        return (
-            self.edges.group_by("u", "v")
-            .agg(
-                pl.len().alias("n_tx"),
-                pl.col("amount_paid").sum().alias("total_paid"),
-                pl.col("is_laundering").max().alias("any_laundering"),
+    def simple_edges(self, usd_rates: Mapping[str, float] | None = None) -> pl.DataFrame:
+        """Collapse parallel edges: one row per (u, v) with count, total amount and label.
+
+        With timestamps (`ts`) the rows also get `first_ts` and are sorted in time
+        order, ties broken by amount (ADR 0001: the order must not use account
+        names). With `usd_rates` ({currency: USD per unit}) they also get
+        `total_usd`; a currency missing from `usd_rates` raises KeyError.
+        """
+        e = self.edges
+        aggs = [
+            pl.len().alias("n_tx"),
+            pl.col("amount_paid").sum().alias("total_paid"),
+            pl.col("is_laundering").max().alias("any_laundering"),
+        ]
+        if usd_rates is not None:
+            missing = set(e["payment_currency"].unique().drop_nulls()) - set(usd_rates)
+            if missing:
+                raise KeyError(f"no USD rate for currencies {sorted(missing)}")
+            e = e.with_columns(
+                (pl.col("amount_paid") * pl.col("payment_currency").replace_strict(dict(usd_rates), return_dtype=pl.Float64))
+                .alias("amount_usd")
             )
-            .sort("u", "v")
-        )
+            aggs.append(pl.col("amount_usd").sum().alias("total_usd"))
+        if "ts" in e.columns:
+            aggs.append(pl.col("ts").min().alias("first_ts"))
+        simple = e.group_by("u", "v").agg(aggs)
+        if "ts" not in e.columns:
+            return simple.sort("u", "v")
+        amount = "total_usd" if usd_rates is not None else "total_paid"
+        return simple.sort("first_ts", amount, "u", "v")
 
     def undirected_pairs(self) -> list[tuple[int, int]]:
         """Distinct unordered qubit pairs, e.g. for one CZ per account pair."""
@@ -312,8 +332,9 @@ class Subgraph:
 def _subgraph_from_records(accounts: list[dict], edges: list[dict], center: int | None) -> Subgraph:
     nodes = pl.DataFrame(accounts, schema={"account_id": pl.Utf8, "node_id": pl.Int64}).with_row_index("qubit")
     idx = dict(zip(nodes["account_id"], nodes["qubit"]))
-    e = pl.DataFrame(edges) if edges else pl.DataFrame(schema={"src": pl.Utf8, "dst": pl.Utf8, "edge_id": pl.Int64,
-                                                              "amount_paid": pl.Float64, "is_laundering": pl.Int64})
+    e = pl.DataFrame(edges) if edges else pl.DataFrame(schema={
+        "src": pl.Utf8, "dst": pl.Utf8, "edge_id": pl.Int64, "ts": pl.Datetime, "amount_paid": pl.Float64,
+        "payment_currency": pl.Utf8, "payment_format": pl.Utf8, "is_laundering": pl.Int64})
     e = e.with_columns(
         pl.col("src").replace_strict(idx, return_dtype=pl.UInt32).alias("u"),
         pl.col("dst").replace_strict(idx, return_dtype=pl.UInt32).alias("v"),
@@ -336,6 +357,7 @@ class GraphDB:
             auth=(user or os.environ.get("NEO4J_USER", "neo4j"), password or os.environ["NEO4J_PASSWORD"]),
             notifications_min_severity="OFF",  # e.g. "label does not exist" when no patterns were loaded
         )
+        self._id_ranges: dict[tuple, tuple] = {}
 
     def close(self) -> None:
         self.driver.close()
@@ -398,13 +420,13 @@ class GraphDB:
                 "UNWIND $frontier AS fid "
                 "MATCH (f:Account {account_id: fid})-[t:TRANSFER]-(n:Account) "
                 "WHERE t.ts >= $t0 AND t.ts <= $t1 AND NOT n.account_id IN $selected "
-                "WITH n, max(t.ts) AS last ORDER BY last DESC "
+                "WITH n, max(t.ts) AS last ORDER BY last DESC, n.account_id "
                 "RETURN n.account_id AS id LIMIT $k",
                 frontier=frontier, selected=selected, t0=t_start, t1=t_end, k=max_nodes - len(selected),
             )
             frontier = [r["id"] for r in nbrs]
             selected.extend(frontier)
-        return self._induced(selected, t_start, t_end, center=edge_id)
+        return self.induced_subgraph(selected, t_start, t_end, center=edge_id)
 
     def attempt_subgraph(self, attempt_id: int) -> Subgraph:
         """All accounts and transfers of one ground-truth laundering attempt (motif instance)."""
@@ -415,14 +437,16 @@ class GraphDB:
             aid=attempt_id,
         )
         edges = self.run(
-            "MATCH (a)-[t:TRANSFER {attempt_id: $aid}]->(b) "
-            "RETURN a.account_id AS src, b.account_id AS dst, t.edge_id AS edge_id, t.ts AS ts, "
-            "t.amount_paid AS amount_paid, t.payment_format AS payment_format, t.is_laundering AS is_laundering",
+            "MATCH (a)-[t:TRANSFER {attempt_id: $aid}]->(b) " + _EDGE_RETURN,
             aid=attempt_id,
         )
         return _subgraph_from_records(accts, _py_ts(edges), center=None)
 
-    def _induced(self, account_ids: list[str], t0, t1, center: int | None) -> Subgraph:
+    def induced_subgraph(self, account_ids: list[str], t0: datetime, t1: datetime,
+                         center: int | None = None) -> Subgraph:
+        """Accounts `account_ids` (in this qubit order) and every transfer between them
+        with t0 <= ts <= t1. Naive datetimes are read as UTC, the import time zone."""
+        t0, t1 = _utc(t0), _utc(t1)
         accts = self.run(
             "UNWIND range(0, size($ids) - 1) AS i "
             "MATCH (a:Account {account_id: $ids[i]}) RETURN a.account_id AS account_id, a.node_id AS node_id ORDER BY i",
@@ -430,12 +454,104 @@ class GraphDB:
         )
         edges = self.run(
             "MATCH (a:Account)-[t:TRANSFER]->(b:Account) "
-            "WHERE a.account_id IN $ids AND b.account_id IN $ids AND t.ts >= $t0 AND t.ts <= $t1 "
-            "RETURN a.account_id AS src, b.account_id AS dst, t.edge_id AS edge_id, t.ts AS ts, "
-            "t.amount_paid AS amount_paid, t.payment_format AS payment_format, t.is_laundering AS is_laundering",
+            "WHERE a.account_id IN $ids AND b.account_id IN $ids AND t.ts >= $t0 AND t.ts <= $t1 " + _EDGE_RETURN,
             ids=account_ids, t0=t0, t1=t1,
         )
         return _subgraph_from_records(accts, _py_ts(edges), center=center)
+
+    # -- dataset building (qlmaml.subgraphs.GraphSource) --------------------- #
+
+    def attempts(self) -> pl.DataFrame:
+        """One row per ground-truth attempt: attempt_id (int), pattern, start_ts, end_ts."""
+        rows = self.run(
+            "MATCH (p:LaunderingAttempt) RETURN toInteger(p.attempt_id) AS attempt_id, p.pattern AS pattern, "
+            "p.start_ts AS start_ts, p.end_ts AS end_ts ORDER BY attempt_id"
+        )
+        for r in rows:
+            r["start_ts"] = _naive(r["start_ts"])
+            r["end_ts"] = _naive(r["end_ts"])
+        return pl.DataFrame(rows, schema={"attempt_id": pl.Int64, "pattern": pl.Utf8,
+                                          "start_ts": pl.Datetime, "end_ts": pl.Datetime})
+
+    def normal_edge_ids(self, t0: datetime, t1: datetime, n: int, seed: int) -> list[int]:
+        """Up to `n` random non-laundering transactions with t0 <= ts < t1.
+
+        `edge_id` is the time-sorted row index, so the window is one contiguous id
+        range: draw ids in it, then keep the non-laundering ones.
+        """
+        key = (t0, t1)
+        if key not in self._id_ranges:
+            r = self.run(
+                "MATCH ()-[t:TRANSFER]->() WHERE t.ts >= $t0 AND t.ts < $t1 "
+                "RETURN min(t.edge_id) AS lo, max(t.edge_id) AS hi",
+                t0=_utc(t0), t1=_utc(t1),
+            )[0]
+            self._id_ranges[key] = (r["lo"], r["hi"])
+        lo, hi = self._id_ranges[key]
+        if lo is None:
+            return []
+        ids = np.random.default_rng(seed).integers(lo, hi + 1, size=n).tolist()
+        rows = self.run(
+            "UNWIND $ids AS eid MATCH ()-[t:TRANSFER {edge_id: eid}]->() WHERE t.is_laundering = 0 "
+            "RETURN DISTINCT eid",
+            ids=ids,
+        )
+        return [r["eid"] for r in rows]
+
+    def transfers_by_id(self, edge_ids: list[int]) -> pl.DataFrame:
+        """edge_id, src, dst, ts of the given transactions."""
+        rows = self.run(
+            "UNWIND $ids AS eid MATCH (a:Account)-[t:TRANSFER {edge_id: eid}]->(b:Account) "
+            "RETURN DISTINCT t.edge_id AS edge_id, a.account_id AS src, b.account_id AS dst, t.ts AS ts",
+            ids=edge_ids,
+        )
+        return pl.DataFrame(_py_ts(rows), schema={"edge_id": pl.Int64, "src": pl.Utf8, "dst": pl.Utf8,
+                                                  "ts": pl.Datetime})
+
+    def neighbor_transfer(self, account_ids: list[str], t0: datetime, t1: datetime,
+                          seed: int) -> tuple[str, datetime] | None:
+        """A random normal transfer in [t0, t1] between one of `account_ids` and a new account."""
+        rows = self.run(
+            "UNWIND $ids AS aid MATCH (a:Account {account_id: aid})-[t:TRANSFER]-(n:Account) "
+            "WHERE t.ts >= $t0 AND t.ts <= $t1 AND t.is_laundering = 0 AND NOT n.account_id IN $ids "
+            "RETURN n.account_id AS n, t.ts AS ts, t.edge_id AS eid ORDER BY eid",
+            ids=account_ids, t0=_utc(t0), t1=_utc(t1),
+        )
+        if not rows:
+            return None
+        r = rows[int(np.random.default_rng(seed).integers(len(rows)))]
+        return r["n"], _naive(r["ts"])
+
+    def usd_rates(self) -> dict[str, float]:
+        """USD per unit of each currency (same rule as `subgraphs.usd_rates_from_transfers`)."""
+        rows = self.run(
+            "MATCH ()-[t:TRANSFER]->() "
+            "WHERE t.payment_currency <> t.receiving_currency "
+            "  AND 'US Dollar' IN [t.payment_currency, t.receiving_currency] AND t.amount_paid > 0 "
+            "WITH CASE WHEN t.receiving_currency = 'US Dollar' THEN t.payment_currency ELSE t.receiving_currency END AS cur, "
+            "     CASE WHEN t.receiving_currency = 'US Dollar' THEN t.amount_received / t.amount_paid "
+            "          ELSE t.amount_paid / t.amount_received END AS rate "
+            "RETURN cur, percentileCont(rate, 0.5) AS rate"  # interpolated median, as polars
+        )
+        out = {r["cur"]: r["rate"] for r in rows}
+        out["US Dollar"] = 1.0
+        return out
+
+
+_EDGE_RETURN = (
+    "RETURN a.account_id AS src, b.account_id AS dst, t.edge_id AS edge_id, t.ts AS ts, "
+    "t.amount_paid AS amount_paid, t.payment_currency AS payment_currency, "
+    "t.payment_format AS payment_format, t.is_laundering AS is_laundering"
+)
+
+
+def _utc(dt: datetime) -> datetime:
+    """Naive datetimes are UTC: the imported `ts:datetime` values carry no zone."""
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
+def _naive(ts) -> datetime:
+    return ts.to_native().replace(tzinfo=None) if hasattr(ts, "to_native") else ts
 
 
 def _py_ts(rows: list[dict]) -> list[dict]:
@@ -443,5 +559,5 @@ def _py_ts(rows: list[dict]) -> list[dict]:
     for r in rows:
         ts = r.get("ts")
         if ts is not None and not isinstance(ts, datetime):
-            r["ts"] = ts.to_native().replace(tzinfo=None)
+            r["ts"] = _naive(ts)
     return rows
