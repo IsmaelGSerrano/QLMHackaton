@@ -232,7 +232,8 @@ def write_cache(samples: list[Sample], path: str | Path, usd_rates: dict[str, fl
         })
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    pl.DataFrame(rows).write_parquet(path)
+    # Scan all rows for the schema: positives come first with matched_to = None.
+    pl.DataFrame(rows, infer_schema_length=None).write_parquet(path)
     return path
 
 

@@ -1,6 +1,7 @@
 """Subgraph dataset (WP1) on synthetic data, through the in-memory FrameGraph source."""
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -154,3 +155,16 @@ def test_cache_round_trip(fake_dataset, tmp_path):
     firsts = [e["first_ts"] for e in row["edges"]]
     assert firsts == sorted(firsts)  # gate order = time order
     assert sum(e["n_tx"] for e in row["edges"]) == s.graph.edges.height
+
+
+def test_cache_holds_more_than_100_positives_before_the_negatives(tmp_path):
+    # Positives come first and have matched_to = None; HI-Small has 370 of them.
+    attempt = [_line(0, "A", "B", 100, 1), _line(10, "B", "C", 90, 1)]
+    src = _write(tmp_path, [_line(5, "X", "Y", 1, 0)], [("STACK", attempt)])
+    p = positive_sample(src, attempt_id=0, max_nodes=4)
+    n = replace(p, label=0, pattern=None, matched_to=0)
+
+    df = read_cache(write_cache([p] * 150 + [n], tmp_path / "c.parquet", usd_rates={"US Dollar": 1.0}))
+
+    assert df.height == 151
+    assert df["matched_to"].to_list() == [None] * 150 + [0]
