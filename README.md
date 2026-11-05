@@ -20,6 +20,8 @@ You do **not** need to beat classical baselines. Mechanistic arguments win: samp
 generalization bounds, kernel alignment, expressivity, qubit/memory efficiency, symmetry-based inductive bias.
 
 **Deliverable:** slides and a **5-minute presentation**, followed by a short Q&A.
+Our deck is [`docs/slides/index.html`](docs/slides/index.html) (reveal.js, no build step), published with GitHub Pages
+at <https://ismaelgserrano.github.io/QLMHackaton/slides/>. Press `S` for speaker notes; add `?print-pdf` to the URL to export a PDF.
 
 **Judging:** (1) theoretical grounding, (2) novelty and creativity, (3) quality of presentation.
 

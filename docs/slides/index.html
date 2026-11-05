@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laundering as directed motifs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/white.min.css">
+<style>
+  :root {
+    --ink: #1f2933; --muted: #5f6b7a; --line: #d9dee5;
+    --laund: #d85a30; --laund-bg: #fbece6; --normal: #888780; --pairs: #1d9e75; --pairs-bg: #e1f5ee;
+    --tbd: #a86400; --tbd-bg: #fdf3dd;
+    --r-main-font: "Inter", system-ui, sans-serif; --r-heading-font: "Inter", system-ui, sans-serif;
+    --r-main-color: var(--ink); --r-heading-color: var(--ink); --r-link-color: var(--pairs);
+    --r-heading-font-weight: 600; --r-heading-text-transform: none; --r-main-font-size: 30px;
+  }
+  .reveal h1 { font-size: 1.9em; } .reveal h2 { font-size: 1.35em; margin-bottom: .5em; }
+  .reveal .kicker { color: var(--muted); font-size: .6em; letter-spacing: .04em; margin-bottom: .2em; }
+  .reveal .muted { color: var(--muted); } .reveal small, .reveal .src { font-size: .55em; color: var(--muted); }
+  .reveal .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2em; align-items: center; text-align: left; }
+  .reveal ul { margin-left: 1em; } .reveal li { margin: .25em 0; }
+  .reveal .tbd { color: var(--tbd); background: var(--tbd-bg); border: 1px dashed var(--tbd); border-radius: 4px; padding: 0 .3em; font-size: .85em; }
+  .reveal .laund { color: var(--laund); font-weight: 600; } .reveal .pairs { color: var(--pairs); font-weight: 600; }
+  .reveal table { font-size: .8em; border-collapse: collapse; margin: 0 auto; }
+  .reveal table th, .reveal table td { border-bottom: 1px solid var(--line); padding: .3em .7em; }
+  .reveal table th { color: var(--muted); font-weight: 500; }
+  .reveal .callout { border-left: 4px solid var(--laund); background: var(--laund-bg); padding: .4em .8em; text-align: left; font-size: .8em; }
+  .reveal .callout.ok { border-color: var(--pairs); background: var(--pairs-bg); }
+  .reveal svg text { font-family: "Inter", system-ui, sans-serif; }
+  .reveal .footer-note { position: absolute; bottom: -1.6em; left: 0; right: 0; font-size: .45em; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">ExtremeData4QML hackathon · IBM AML, HI-Small</p>
+  <h1>Laundering as directed motifs</h1>
+  <p class="muted">A small quantum graph classifier on transaction subgraphs</p>
+  <p class="src">Deck in progress: dataset section drafted. Numbers marked <span class="tbd">TBD</span> come from the running HI-Small build.</p>
+  <aside class="notes">Title. The talk follows the data: laundering is a directed subgraph motif, so we classify small directed subgraphs, one qubit per account.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">Data</p>
+  <h2>From 5 M transactions to small graphs</h2>
+  <div class="cols">
+    <div>
+      <ul>
+        <li>Task: <b>graph classification</b>. Input: a small directed subgraph. Output: "contains a laundering attempt?"</li>
+        <li>One qubit per account: <b>≤ 8</b> for IQM Garnet, <b>≤ 12</b> in simulation</li>
+        <li>HI-Small lists <b>370 attempts</b> in 8 motif types</li>
+        <li>Fit without cutting: 196 at 8 accounts (53 %), 258 at 12 (70 %)</li>
+        <li>Larger attempts are <b>cut in time</b>: keep accounts in the order the money reaches them</li>
+      </ul>
+    </div>
+    <svg viewBox="0 0 520 240" role="img" aria-label="An attempt cut in time at 4 accounts">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6"/></marker></defs>
+      <line x1="58" y1="112" x2="136" y2="62" stroke="#d85a30" stroke-width="2" marker-end="url(#ah)"/>
+      <line x1="58" y1="128" x2="136" y2="178" stroke="#d85a30" stroke-width="2" marker-end="url(#ah)"/>
+      <line x1="168" y1="190" x2="246" y2="190" stroke="#d85a30" stroke-width="2" marker-end="url(#ah)"/>
+      <line x1="288" y1="190" x2="386" y2="190" stroke="#888780" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+      <text x="82" y="78" style="font-size:15px" fill="#5f6b7a">t1</text><text x="82" y="172" style="font-size:15px" fill="#5f6b7a">t2</text>
+      <text x="200" y="180" style="font-size:15px" fill="#5f6b7a">t3</text><text x="330" y="180" style="font-size:15px" fill="#5f6b7a">t4</text>
+      <g fill="#fbece6" stroke="#d85a30" stroke-width="2"><circle cx="45" cy="120" r="15"/><circle cx="152" cy="52" r="15"/><circle cx="152" cy="190" r="15"/><circle cx="270" cy="190" r="15"/></g>
+      <circle cx="404" cy="190" r="15" fill="#fff" stroke="#888780" stroke-width="2" stroke-dasharray="4 3"/>
+      <g style="font-size:15px" text-anchor="middle" dominant-baseline="central" fill="#1f2933"><text x="45" y="120">A</text><text x="152" y="52">B</text><text x="152" y="190">C</text><text x="270" y="190">D</text><text x="404" y="190" fill="#888780">E</text></g>
+      <line x1="318" y1="30" x2="318" y2="225" stroke="#a86400" stroke-width="1.5" stroke-dasharray="6 4"/>
+      <text x="326" y="44" style="font-size:15px" fill="#a86400">cap: 4 accounts</text>
+    </svg>
+  </div>
+  <p class="src">Dataset: Altman et al. [1]. Counts measured on <code>HI-Small_Patterns.txt</code>. Cutting is subsampling.</p>
+  <aside class="notes">A positive is the induced subgraph on an attempt's accounts over its time window, so normal background transfers between them are included. If the attempt has more accounts than qubits, we follow the money in time and stop at the cap: here E is dropped and the window ends at t3.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">Data</p>
+  <h2>Negatives must look like positives</h2>
+  <ul style="text-align:left">
+    <li>Every positive gets <b>5 negatives</b> (1 : 5): imbalanced, but trainable</li>
+    <li>Same <b>number of accounts</b> (exact) and <b>gates</b> (merged transfers between two accounts, ±1)</li>
+    <li>Same temporal split; no laundering transfer anywhere in a negative</li>
+  </ul>
+  <div class="callout">Otherwise the model can separate the classes by <b>size or shape</b> and never learn laundering.</div>
+  <aside class="notes">This is the design rule that protects the result. If positives were bigger or denser than negatives, any classifier, quantum or not, could score well by counting. Matching on accounts and gates removes that shortcut.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">Data</p>
+  <h2>Ego-nets cannot look like separate pairs</h2>
+  <svg viewBox="0 0 680 270" role="img" aria-label="BIPARTITE positive with 4 separate pairs, connected ego-net, and the pairs negative" style="width:88%">
+    <defs><marker id="ah2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6"/></marker></defs>
+    <g style="font-size:15px" font-weight="600" text-anchor="middle" fill="#1f2933"><text x="120" y="22">Laundering (BIPARTITE)</text><text x="340" y="22">Normal: ego-net</text><text x="560" y="22">Normal: pairs</text></g>
+    <g stroke="#d85a30" stroke-width="2"><line x1="74" y1="60" x2="160" y2="60" marker-end="url(#ah2)"/><line x1="74" y1="105" x2="160" y2="105" marker-end="url(#ah2)"/><line x1="74" y1="150" x2="160" y2="150" marker-end="url(#ah2)"/><line x1="74" y1="195" x2="160" y2="195" marker-end="url(#ah2)"/></g>
+    <g fill="#fbece6" stroke="#d85a30" stroke-width="2"><circle cx="62" cy="60" r="10"/><circle cx="62" cy="105" r="10"/><circle cx="62" cy="150" r="10"/><circle cx="62" cy="195" r="10"/><circle cx="176" cy="60" r="10"/><circle cx="176" cy="105" r="10"/><circle cx="176" cy="150" r="10"/><circle cx="176" cy="195" r="10"/></g>
+    <g stroke="#888780" stroke-width="2"><line x1="296" y1="80" x2="332" y2="118"/><line x1="340" y1="72" x2="340" y2="114"/><line x1="384" y1="80" x2="348" y2="118"/><line x1="392" y1="128" x2="352" y2="128"/><line x1="384" y1="176" x2="348" y2="138"/><line x1="340" y1="184" x2="340" y2="142"/><line x1="296" y1="176" x2="332" y2="138"/></g>
+    <g fill="#f1efe8" stroke="#888780" stroke-width="2"><circle cx="340" cy="128" r="10"/><circle cx="290" cy="74" r="10"/><circle cx="340" cy="62" r="10"/><circle cx="390" cy="74" r="10"/><circle cx="402" cy="128" r="10"/><circle cx="390" cy="182" r="10"/><circle cx="340" cy="194" r="10"/><circle cx="290" cy="182" r="10"/></g>
+    <g stroke="#1d9e75" stroke-width="2"><line x1="514" y1="60" x2="600" y2="60" marker-end="url(#ah2)"/><line x1="514" y1="105" x2="600" y2="105" marker-end="url(#ah2)"/><line x1="514" y1="150" x2="600" y2="150" marker-end="url(#ah2)"/><line x1="514" y1="195" x2="600" y2="195" marker-end="url(#ah2)"/></g>
+    <g fill="#e1f5ee" stroke="#1d9e75" stroke-width="2"><circle cx="502" cy="60" r="10"/><circle cx="502" cy="105" r="10"/><circle cx="502" cy="150" r="10"/><circle cx="502" cy="195" r="10"/><circle cx="616" cy="60" r="10"/><circle cx="616" cy="105" r="10"/><circle cx="616" cy="150" r="10"/><circle cx="616" cy="195" r="10"/></g>
+    <g style="font-size:14px" text-anchor="middle" fill="#5f6b7a"><text x="120" y="232">8 accounts, 4 gates</text><text x="340" y="232">8 accounts, ≥ 7 gates</text><text x="560" y="232">8 accounts, 4 gates</text></g>
+    <g style="font-size:14px" text-anchor="middle"><text x="340" y="256" fill="#d85a30">connected: never matches</text><text x="560" y="256" fill="#1d9e75">matches</text></g>
+  </svg>
+  <p style="font-size:.6em;text-align:left;margin:.2em 6%">
+    Before the fix, <span class="laund">82 of 370</span> positives (n = 8) got no negative at all: BIPARTITE 28/49, STACK 27/43.
+    Fix: build those negatives <span class="pairs">like positives</span>, from a few unrelated normal transfers in a window as long as the attempt.
+  </p>
+  <aside class="notes">An ego-net grows from one transaction by adding neighbours, so it is always connected: n accounts need at least n minus 1 gates. Many BIPARTITE and STACK attempts are separate sender-receiver pairs. Without a fix, separate pairs exist only on the laundering side, and a model could learn "disconnected means laundering". The pairs sampler closes that gap. Positives that are small and very dense still cannot be matched, and we drop them (next slide).</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">Data</p>
+  <h2>The dataset we train on</h2>
+  <table>
+    <thead><tr><th></th><th>n = 8 (Garnet)</th><th>n = 12 (simulator)</th></tr></thead>
+    <tbody>
+      <tr><td>Positives kept / 370</td><td><span class="tbd">TBD</span></td><td><span class="tbd">TBD</span></td></tr>
+      <tr><td>Attempts cut at the cap</td><td><span class="tbd">TBD</span></td><td><span class="tbd">TBD</span></td></tr>
+      <tr><td>Negatives: ego-net / pairs</td><td><span class="tbd">TBD</span></td><td><span class="tbd">TBD</span></td></tr>
+      <tr><td>Dropped positives (no 5 matches)</td><td><span class="tbd">TBD</span></td><td><span class="tbd">TBD</span></td></tr>
+      <tr><td>Train / val / test positives</td><td><span class="tbd">TBD</span></td><td><span class="tbd">TBD</span></td></tr>
+    </tbody>
+  </table>
+  <p class="src" style="margin-top:1em">Temporal split 60 / 20 / 20 by subgraph start time, as in [1, 2]: train on earlier, test on later transactions.</p>
+  <aside class="notes">These are the numbers from the HI-Small build. Say how many positives were dropped and which motifs they come from: they are small, dense subgraphs that no normal subgraph resembles.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">Backup</p>
+  <h2>Known limits of the dataset</h2>
+  <ul style="text-align:left;font-size:.8em">
+    <li><b>Subsampling:</b> attempts above the qubit cap are cut in time</li>
+    <li><b>Drops:</b> small, dense positives with no normal look-alike are removed and reported by motif</li>
+    <li><b>Split boundary:</b> no gap between splits; a subgraph that starts just before a cut can include later transfers</li>
+    <li><b>Window length:</b> ego-net negatives look back 1 day; positives last as long as the attempt. The circuit uses timestamps only to order gates</li>
+    <li><b>Stricter negatives:</b> no laundering transfer anywhere in a negative, not only at its center</li>
+  </ul>
+  <aside class="notes">Backup slide for questions on leakage and shortcuts.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">References</p>
+  <ol style="font-size:.6em;text-align:left">
+    <li>Altman et al., <i>Realistic Synthetic Financial Transactions for Anti-Money Laundering Models</i>, NeurIPS 2023 Datasets and Benchmarks.</li>
+    <li>Egressy et al., <i>Provably Powerful Graph Neural Networks for Directed Multigraphs</i>, AAAI 2024.</li>
+  </ol>
+</section>
+
+</div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/notes/notes.min.js"></script>
+<script>
+  Reveal.initialize({ hash: true, slideNumber: "c/t", transition: "fade", width: 1280, height: 720, plugins: [RevealNotes] });
+</script>
+</body>
+</html>
