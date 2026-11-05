@@ -54,7 +54,7 @@ def write_fake_transactions(
     blocks: list[str] = []
     for _ in range(n_motifs):
         first = len(lines)
-        kind = rng.choice(["fan-out", "fan-in", "cycle"])
+        kind = rng.choice(["fan-out", "fan-in", "cycle", "bipartite"])
         base = start + timedelta(minutes=int(rng.integers(0, n_days * 24 * 60 - 600)))
         hub = int(rng.integers(n_accounts))
         others = rng.choice(n_accounts, int(rng.integers(4, 9)), replace=False)
@@ -65,6 +65,9 @@ def write_fake_transactions(
         elif kind == "fan-in":
             for k, o in enumerate(others):
                 lines.append(_row(base + timedelta(minutes=5 * k), int(o), hub, amt / len(others), "ACH", 1))
+        elif kind == "bipartite":  # separate sender -> receiver pairs, as in many HI-Small attempts
+            for k, (a, b) in enumerate(zip(others[0::2], others[1::2])):
+                lines.append(_row(base + timedelta(minutes=5 * k), int(a), int(b), amt / len(others), "ACH", 1))
         else:
             ring = [hub, *map(int, others[:4])]
             for k in range(len(ring)):

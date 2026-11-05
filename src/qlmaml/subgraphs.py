@@ -9,11 +9,18 @@ qubit per account. Output: a score for "contains a laundering attempt".
   **cut in time**: accounts are kept in the order the money reaches them, and
   the window ends at the last attempt transfer that needs no new account
   beyond the cap. This is subsampling and must be said on the slides.
-- **Negative:** an ego-net (`ego_subgraph`) around a normal transaction,
-  without any laundering transfer (stricter than "center not laundering": a
-  negative must not contain an attempt), matched to a positive of the same temporal
-  split on node count (exact) and merged edge count (within `edge_tol`).
-  `ratio` negatives per positive (default 1:5).
+- **Negative:** a laundering-free subgraph (stricter than "center not
+  laundering": a negative must not contain an attempt), matched to a positive
+  of the same temporal split on node count (exact) and gate count (within
+  `edge_tol`). `ratio` negatives per positive (default 1:5). Two kinds:
+  - `"ego"`: an ego-net (`ego_subgraph`) around a normal transaction. It is
+    connected, so with n accounts it has at least n - 1 gates.
+  - `"pairs"`: for positives sparser than that (many BIPARTITE and STACK
+    attempts are separate sender -> receiver pairs), the accounts of a few
+    unrelated normal transfers from a window as long as the positive, built
+    the same way as a positive (induced subgraph on their accounts).
+  Positives that still do not get `ratio` matches (small, dense ones) are
+  **dropped** and listed in `Dataset.dropped`; report them by pattern.
 - **Split:** temporal, by the start time of the subgraph (its first transfer).
   Cut points are the 60 % / 80 % quantiles of the positives' start times;
   negatives use the same cut points. There is no gap between splits, so a
@@ -21,7 +28,7 @@ qubit per account. Output: a score for "contains a laundering attempt".
   next period (a positive runs to its attempt's end, a negative looks back
   `window`). Say so with the results.
 - **Known shortcut risk:** positive windows last as long as the attempt (often
-  days); negative windows are `window` long (1 day). A model that sees edge
+  days); ego-net windows are `window` long (1 day). A model that sees edge
   timestamps could learn the time span. WP2 uses timestamps only for gate order.
 
 Both classes come from the same graph source and the same induced-subgraph
@@ -31,8 +38,7 @@ the same queries over the same import tables; used by tests and `--fake`).
 """
 from __future__ import annotations
 
-import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from functools import cached_property
 from pathlib import Path
@@ -63,6 +69,11 @@ class GraphSource(Protocol):
 
     def normal_edge_ids(self, t0: datetime, t1: datetime, n: int, seed: int) -> list[int]: ...
 
+    def transfers_by_id(self, edge_ids: list[int]) -> pl.DataFrame: ...  # edge_id, src, dst, ts
+
+    def neighbor_transfer(self, account_ids: list[str], t0: datetime, t1: datetime,
+                          seed: int) -> tuple[str, datetime] | None: ...
+
     def usd_rates(self) -> dict[str, float]: ...
 
 
@@ -73,11 +84,12 @@ class Sample:
     graph: Subgraph
     label: int  # 1 = contains a laundering attempt
     pattern: str | None  # attempt motif type, None for negatives
-    source_id: int  # attempt_id (positives) or center edge_id (negatives)
+    source_id: int  # attempt_id (positives), center edge_id (ego), first transfer's edge_id (pairs)
     start_ts: datetime  # first transfer in the subgraph; decides the split
     cut: bool = False  # True if the attempt was cut at max_nodes
     split: str | None = None
     matched_to: int | None = None  # negatives: attempt_id of the positive they are matched to
+    kind: str = "attempt"  # "attempt" (positive), "ego" or "pairs" (negatives)
 
     @cached_property
     def n_edges(self) -> int:
@@ -124,7 +136,45 @@ def negative_sample(src: GraphSource, edge_id: int, max_nodes: int, hops: int = 
     g = src.ego_subgraph(edge_id, hops=hops, max_nodes=max_nodes, window=window)
     if g.edges["is_laundering"].sum() > 0:
         return None
-    return Sample(graph=g, label=0, pattern=None, source_id=edge_id, start_ts=g.edges["ts"].min())
+    return Sample(graph=g, label=0, pattern=None, source_id=edge_id, start_ts=g.edges["ts"].min(), kind="ego")
+
+
+def pairs_sample(src: GraphSource, n_nodes: int, t0: datetime, t1: datetime, seed: int) -> Sample | None:
+    """Accounts of a few unrelated normal transfers in [t0, t1], until there are `n_nodes`.
+
+    Built like a positive: the induced subgraph on those accounts, from the first
+    to the last chosen transfer. Usually separate pairs; an odd `n_nodes` gets one
+    transfer that touches a chosen account. None if `n_nodes` accounts cannot be
+    reached or the subgraph contains a laundering transfer.
+    """
+    ids = src.normal_edge_ids(t0, t1, n=4 * n_nodes, seed=seed)
+    if not ids:
+        return None
+    order = {eid: k for k, eid in enumerate(ids)}
+    rows = src.transfers_by_id(ids).sort(pl.col("edge_id").replace_strict(order, return_dtype=pl.Int64))
+    selected: list[str] = []
+    times: list[datetime] = []
+    first_id = None
+    for eid, a, b, ts in rows.select("edge_id", "src", "dst", "ts").iter_rows():
+        new = [x for x in dict.fromkeys((a, b)) if x not in selected]
+        if a == b or not new or len(selected) + len(new) > n_nodes:
+            continue
+        selected += new
+        times.append(ts)
+        first_id = eid if first_id is None else first_id
+        if len(selected) == n_nodes:
+            break
+    if selected and len(selected) == n_nodes - 1:
+        extra = src.neighbor_transfer(selected, t0, t1, seed=seed)
+        if extra is not None:
+            selected.append(extra[0])
+            times.append(extra[1])
+    if len(selected) != n_nodes:
+        return None
+    g = src.induced_subgraph(selected, min(times), max(times))
+    if g.edges["is_laundering"].sum() > 0:
+        return None
+    return Sample(graph=g, label=0, pattern=None, source_id=first_id, start_ts=g.edges["ts"].min(), kind="pairs")
 
 
 def split_cuts(start_ts: list[datetime], fractions: tuple[float, float, float] = (0.6, 0.2, 0.2)) -> tuple[datetime, datetime]:
@@ -140,6 +190,12 @@ def assign_split(ts: datetime, cuts: tuple[datetime, datetime]) -> str:
     return "train" if ts < cuts[0] else "val" if ts < cuts[1] else "test"
 
 
+@dataclass
+class Dataset:
+    samples: list[Sample]  # kept positives, then their matched negatives
+    dropped: list[Sample] = field(default_factory=list)  # positives without `ratio` matches
+
+
 def build_dataset(
     src: GraphSource,
     max_nodes: int,
@@ -150,13 +206,15 @@ def build_dataset(
     window: timedelta = timedelta(days=1),
     max_tries: int = 200,
     seed: int = 0,
-) -> list[Sample]:
+) -> Dataset:
     """Positives for every attempt, `ratio` matched negatives per positive, temporal split.
 
-    Negatives are drawn from normal transactions in the positive's split period.
-    A drawn ego-net that does not fit the current positive goes to a pool and can
-    match a later one. If `max_tries` candidates do not give `ratio` matches, the
-    positive keeps fewer negatives and a warning says so.
+    Negatives are drawn from normal transactions in the positive's split period:
+    ego-nets when an ego-net can reach the positive's gate count, `pairs_sample`
+    when the positive is sparser. A candidate that does not fit the current
+    positive goes to a pool and can match a later one. A positive that does not
+    get `ratio` matches in `max_tries` candidates is dropped (with its partial
+    matches back in the pool). Split cut points are set before dropping.
     """
     pos = [positive_sample(src, aid, max_nodes, pattern=pat)
            for aid, pat in src.attempts().sort("attempt_id").select("attempt_id", "pattern").iter_rows()]
@@ -173,23 +231,32 @@ def build_dataset(
     pool: dict[str, list[Sample]] = {k: [] for k in SPLITS}
     tried: set[int] = set()
     neg: list[Sample] = []
+    dropped: list[Sample] = []
     for k in rng.permutation(len(pos)):
         p = pos[k]
         n_p, e_p = p.graph.n_qubits, p.n_edges
-        found, tries = 0, 0
-        while found < ratio:
+        mine: list[Sample] = []
+        tries = 0
+        while len(mine) < ratio:
             fits = [s for s in pool[p.split] if s.graph.n_qubits == n_p and abs(s.n_edges - e_p) <= edge_tol]
             if fits:
                 best = min(fits, key=lambda s: (abs(s.n_edges - e_p), s.source_id))
                 pool[p.split].remove(best)
                 best.matched_to = p.source_id
-                neg.append(best)
-                found += 1
+                mine.append(best)
                 continue
             if tries >= max_tries:
-                warnings.warn(f"attempt {p.source_id}: only {found}/{ratio} matched negatives "
-                              f"(n={n_p}, edges={e_p}, split={p.split})", stacklevel=2)
                 break
+            if e_p + edge_tol < n_p - 1:  # sparser than any connected ego-net: build from separate transfers
+                tries += 1
+                lo, hi = period[p.split]
+                span = max(p.graph.edges["ts"].max() - p.start_ts, timedelta(hours=1))
+                t0 = lo + max(hi - span - lo, timedelta(0)) * float(rng.random())
+                s = pairs_sample(src, n_p, t0, min(t0 + span, hi), seed=int(rng.integers(2**31)))
+                if s is not None:
+                    s.split = assign_split(s.start_ts, cuts)
+                    pool[s.split].append(s)
+                continue
             batch = 20
             ids = [i for i in src.normal_edge_ids(*period[p.split], n=batch, seed=int(rng.integers(2**31)))
                    if i not in tried]
@@ -201,7 +268,15 @@ def build_dataset(
                 if s is not None:
                     s.split = assign_split(s.start_ts, cuts)
                     pool[s.split].append(s)
-    return pos + neg
+        if len(mine) < ratio:
+            dropped.append(p)
+            for s in mine:
+                s.matched_to = None
+                pool[s.split].append(s)
+        else:
+            neg += mine
+    kept = [p for p in pos if p not in dropped]
+    return Dataset(samples=kept + neg, dropped=dropped)
 
 
 # --------------------------------------------------------------------------- #
@@ -226,7 +301,8 @@ def write_cache(samples: list[Sample], path: str | Path, usd_rates: dict[str, fl
         rows.append({
             "split": s.split, "label": s.label, "pattern": s.pattern,
             "n_qubits": s.graph.n_qubits, "n_edges": s.n_edges,
-            "source_id": s.source_id, "matched_to": s.matched_to, "start_ts": s.start_ts, "cut": s.cut,
+            "kind": s.kind, "source_id": s.source_id, "matched_to": s.matched_to, "start_ts": s.start_ts,
+            "cut": s.cut,
             "nodes": s.graph.nodes["account_id"].to_list(),
             "edges": edges.with_columns(pl.col("u", "v").cast(pl.Int64)).to_dicts(),
         })
@@ -276,6 +352,21 @@ class FrameGraph:
             (pl.col("is_laundering") == 0) & (pl.col("ts") >= t0) & (pl.col("ts") < t1)
         )["edge_id"]
         return ids.sample(min(n, ids.len()), seed=seed).to_list()
+
+    def transfers_by_id(self, edge_ids: list[int]) -> pl.DataFrame:
+        return self.transfers.filter(pl.col("edge_id").is_in(edge_ids)).select("edge_id", "src", "dst", "ts")
+
+    def neighbor_transfer(self, account_ids: list[str], t0: datetime, t1: datetime,
+                          seed: int) -> tuple[str, datetime] | None:
+        """A random normal transfer in [t0, t1] between one of `account_ids` and a new account."""
+        w = self.transfers.filter(
+            (pl.col("is_laundering") == 0) & (pl.col("ts") >= t0) & (pl.col("ts") <= t1)
+            & (pl.col("src").is_in(account_ids) != pl.col("dst").is_in(account_ids))
+        )
+        if w.is_empty():
+            return None
+        r = w.sample(1, seed=seed).row(0, named=True)
+        return (r["dst"] if r["src"] in account_ids else r["src"]), r["ts"]
 
     def _subgraph(self, account_ids: list[str], edges: pl.DataFrame, center: int | None) -> Subgraph:
         accts = [{"account_id": a, "node_id": self.node_id[a]} for a in account_ids]

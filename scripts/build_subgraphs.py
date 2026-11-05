@@ -7,7 +7,8 @@ Usage:
 
 Writes data/processed/subgraphs_<name>_n<k>.parquet (git-ignored) and a
 summary JSON next to it: counts per split and label, positive:negative ratio,
-how many attempts were cut at the qubit cap, and how well negatives match the
+how many attempts were cut at the qubit cap, which positives were dropped
+for lack of matching negatives (by pattern), and how well negatives match the
 positives on edge count. Training and hardware scripts read the parquet and
 do not need Neo4j. See `qlmaml.subgraphs` for the sampling rules.
 """
@@ -20,24 +21,27 @@ from collections import Counter
 from datetime import timedelta
 from pathlib import Path
 
-from qlmaml.subgraphs import SPLITS, FrameGraph, Sample, build_dataset, write_cache
+from qlmaml.subgraphs import SPLITS, Dataset, FrameGraph, build_dataset, write_cache
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "data" / "processed"
 
 
-def summarize(ds: list[Sample], args: argparse.Namespace, max_nodes: int) -> dict:
+def summarize(dataset: Dataset, args: argparse.Namespace, max_nodes: int) -> dict:
+    ds = dataset.samples
     pos = [s for s in ds if s.label == 1]
     neg = [s for s in ds if s.label == 0]
     by_id = {p.source_id: p for p in pos}
     edge_gap = [abs(n.n_edges - by_id[n.matched_to].n_edges) for n in neg]
-    short = {p.source_id: args.ratio - c for p in pos
-             if (c := sum(1 for n in neg if n.matched_to == p.source_id)) < args.ratio}
     return {
         "max_nodes": max_nodes,
-        "ratio_target": f"1:{args.ratio}",
+        "ratio": f"1:{args.ratio}",
         "positives": len(pos),
         "negatives": len(neg),
+        "negatives_by_kind": dict(sorted(Counter(n.kind for n in neg).items())),
+        "dropped_positives": len(dataset.dropped),
+        "dropped_by_pattern": dict(sorted(Counter(p.pattern for p in dataset.dropped).items())),
+        "dropped_shapes": sorted({(p.graph.n_qubits, p.n_edges) for p in dataset.dropped}),
         "attempts_cut": sum(p.cut for p in pos),
         "per_split": {k: {"pos": sum(1 for s in pos if s.split == k), "neg": sum(1 for s in neg if s.split == k)}
                       for k in SPLITS},
@@ -48,7 +52,6 @@ def summarize(ds: list[Sample], args: argparse.Namespace, max_nodes: int) -> dic
         "edges_hist": {"pos": dict(sorted(Counter(s.n_edges for s in pos).items())),
                        "neg": dict(sorted(Counter(s.n_edges for s in neg).items()))},
         "edge_match_abs_gap": dict(sorted(Counter(edge_gap).items())),
-        "positives_short_of_negatives": short,
         "settings": {"edge_tol": args.edge_tol, "hops": args.hops, "window_h": args.window_h,
                      "max_tries": args.max_tries, "seed": args.seed, "source": "fake" if args.fake else "neo4j"},
     }
@@ -88,11 +91,12 @@ def main() -> None:
             t0 = time.time()
             ds = build_dataset(src, max_nodes=k, ratio=args.ratio, edge_tol=args.edge_tol, hops=args.hops,
                                window=timedelta(hours=args.window_h), max_tries=args.max_tries, seed=args.seed)
-            path = write_cache(ds, OUT / f"subgraphs_{args.name}_n{k}.parquet", usd_rates=rates)
+            path = write_cache(ds.samples, OUT / f"subgraphs_{args.name}_n{k}.parquet", usd_rates=rates)
             summary = summarize(ds, args, k)
             path.with_suffix(".json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-            print(f"n={k}: {summary['positives']} pos, {summary['negatives']} neg, "
-                  f"{summary['attempts_cut']} cut, {summary['per_split']} ({time.time() - t0:.0f}s) -> {path}")
+            print(f"n={k}: {summary['positives']} pos, {summary['negatives']} neg {summary['negatives_by_kind']}, "
+                  f"{summary['dropped_positives']} dropped {summary['dropped_by_pattern']}, "
+                  f"{summary['attempts_cut']} cut ({time.time() - t0:.0f}s) -> {path}")
     finally:
         close()
 

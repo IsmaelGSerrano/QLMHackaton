@@ -498,6 +498,30 @@ class GraphDB:
         )
         return [r["eid"] for r in rows]
 
+    def transfers_by_id(self, edge_ids: list[int]) -> pl.DataFrame:
+        """edge_id, src, dst, ts of the given transactions."""
+        rows = self.run(
+            "UNWIND $ids AS eid MATCH (a:Account)-[t:TRANSFER {edge_id: eid}]->(b:Account) "
+            "RETURN DISTINCT t.edge_id AS edge_id, a.account_id AS src, b.account_id AS dst, t.ts AS ts",
+            ids=edge_ids,
+        )
+        return pl.DataFrame(_py_ts(rows), schema={"edge_id": pl.Int64, "src": pl.Utf8, "dst": pl.Utf8,
+                                                  "ts": pl.Datetime})
+
+    def neighbor_transfer(self, account_ids: list[str], t0: datetime, t1: datetime,
+                          seed: int) -> tuple[str, datetime] | None:
+        """A random normal transfer in [t0, t1] between one of `account_ids` and a new account."""
+        rows = self.run(
+            "UNWIND $ids AS aid MATCH (a:Account {account_id: aid})-[t:TRANSFER]-(n:Account) "
+            "WHERE t.ts >= $t0 AND t.ts <= $t1 AND t.is_laundering = 0 AND NOT n.account_id IN $ids "
+            "RETURN n.account_id AS n, t.ts AS ts, t.edge_id AS eid ORDER BY eid",
+            ids=account_ids, t0=_utc(t0), t1=_utc(t1),
+        )
+        if not rows:
+            return None
+        r = rows[int(np.random.default_rng(seed).integers(len(rows)))]
+        return r["n"], _naive(r["ts"])
+
     def usd_rates(self) -> dict[str, float]:
         """USD per unit of each currency (same rule as `subgraphs.usd_rates_from_transfers`)."""
         rows = self.run(
