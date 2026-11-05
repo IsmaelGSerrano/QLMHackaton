@@ -222,3 +222,6 @@ __marimo__/
 # Hackathon: local data and paper PDFs (never commit)
 data/
 literature/pdfs/
+
+# Smoke-test outputs on synthetic data
+results/FAKE-*/

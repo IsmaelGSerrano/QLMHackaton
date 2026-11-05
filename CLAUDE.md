@@ -22,8 +22,10 @@ See `README.md` for the dataset description and `literature/README.md` for the r
 
 ## Tooling (default choices; change them here if the team decides otherwise)
 
-- Python 3.11+, PennyLane or Qiskit for circuits, PyTorch / PyTorch Geometric for classical graph models, pandas/polars for data.
-- Put reusable code in `src/` and exploration in `notebooks/`. Keep notebooks runnable from top to bottom.
+- Python 3.12 in `.venv`, polars for data, XGBoost for the classical baseline, PennyLane for circuits. Add PyTorch Geometric only if we actually train a GNN.
+- IBM's `snapml` (Graph Feature Preprocessor) has no Windows/py3.12 wheel, so motif features live in `src/qlmaml/features.py`. Extend that file rather than adding a new feature module.
+- Reusable code goes in `src/qlmaml/`, runnable experiments in `scripts/`, exploration in `notebooks/` (runnable top to bottom). Each experiment writes a JSON to `results/<dataset>/`.
+- `python -m pytest` must pass before committing. `python scripts/baseline.py --fake` is the end-to-end smoke test (synthetic data, never report its numbers).
 - Add new dependencies to `requirements.txt`.
 
 ## Writing

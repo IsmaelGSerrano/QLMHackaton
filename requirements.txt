@@ -1,0 +1,22 @@
+# Data
+polars>=1.0
+pyarrow>=15
+pandas>=2.2
+numpy>=1.26
+
+# Classical ML baseline
+scikit-learn>=1.5
+xgboost>=2.1
+# NOTE: IBM's snapml (GraphFeaturePreprocessor) has no wheel for Python 3.12 on
+# Windows, so motif features are implemented in src/qlmaml/features.py instead.
+python-igraph>=0.11
+pytest>=8
+
+# Quantum
+pennylane>=0.38
+
+# Tooling
+kaggle>=1.6
+matplotlib>=3.9
+jupyterlab>=4.2
+tqdm>=4.66

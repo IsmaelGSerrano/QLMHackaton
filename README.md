@@ -75,13 +75,53 @@ You need a Kaggle API token in `~/.kaggle/kaggle.json`. You can also download th
 
 ```
 .
-├── README.md          # This file
-├── CLAUDE.md          # Guidance for Claude Code / AI assistants working in this repo
-├── literature/        # Key papers on the dataset, AML graph ML, and quantum ML (links + notes)
-└── data/              # Local only, git-ignored (raw/ and processed/)
+├── README.md            # This file
+├── CLAUDE.md            # Guidance for Claude Code / AI assistants working in this repo
+├── requirements.txt     # Python dependencies (pip install -r requirements.txt)
+├── pyproject.toml       # Makes `qlmaml` importable (pip install -e .)
+├── src/qlmaml/          # Reusable code
+│   ├── data.py          #   load *_Trans.csv, node ids, temporal split, parse *_Patterns.txt
+│   ├── features.py      #   per-transaction motif/activity features (fan-in/out, cycles, ...)
+│   ├── metrics.py       #   PR-AUC, minority F1, recall at fixed FPR
+│   └── fake_data.py     #   tiny synthetic file in the same format, for smoke tests only
+├── scripts/baseline.py  # Classical baseline: features + XGBoost on a temporal split
+├── tests/               # pytest
+├── results/<dataset>/   # Metrics JSON per run (committed; FAKE-* runs are ignored)
+├── literature/          # Key papers on the dataset, AML graph ML, and quantum ML (links + notes)
+└── data/                # Local only, git-ignored (raw/ and processed/)
 ```
 
-We add new folders (`src/`, `notebooks/`, `slides/`) as the project grows. Update this section when you do.
+## Setup and running the baseline
+
+```bash
+python -m venv .venv && .venv/Scripts/activate   # Windows; use source .venv/bin/activate elsewhere
+```
+
+```bash
+pip install -r requirements.txt && pip install -e .
+```
+
+```bash
+python -m pytest
+```
+
+Smoke test on synthetic data (no download needed; the numbers mean nothing):
+
+```bash
+python scripts/baseline.py --fake
+```
+
+Real baseline on HI-Small (needs the Kaggle data in `data/raw/`):
+
+```bash
+python scripts/baseline.py data/raw/HI-Small_Trans.csv
+```
+
+The script does a day-based 60/20/20 temporal split (same recipe as IBM's Multi-GNN), builds
+per-transaction features from each account's recent activity (fan-in, fan-out, unique counterparties,
+amounts, 2- and 3-cycles), trains XGBoost with early stopping on validation, picks the threshold on
+validation, and reports PR-AUC, minority-class F1 and recall at 0.1% / 1% FPR on test.
+Results go to `results/<dataset>/baseline_xgb.json`.
 
 ## Literature
 
