@@ -34,12 +34,14 @@ See `README.md` for the dataset description and `literature/README.md` for the r
 
 ## Quantum hardware: IQM Garnet on IQM Resonance
 
-The team has access to real hardware through [IQM Resonance](https://resonance.iqm.tech/). The only device is **IQM Garnet**.
+The team has access to real hardware through [IQM Resonance](https://resonance.iqm.tech/). Resonance lists several machines (plus free `<name>:mock` versions of them); **we target IQM Garnet**. Hackathon rule: never run jobs on the real **Emerald** (its mock is allowed).
+
+- **Machine selection:** use `qlmaml.hardware.select_backend(circuits, target="fake" | "mock" | "qpu")`. It pins Garnet so hardware results stay comparable with `IQMFakeGarnet` and the SWAP table, and raises instead of switching machine when Garnet is not ready. It wraps the organisers' picker `src/qlmaml/qpu_pick.py` (vendored unchanged; do not edit it). `uv run python -m qlmaml.qpu_pick --qubits 8` shows every machine's queue and price (read-only, no credits). Test the submit path on `target="mock"` (free) before `target="qpu"`.
 
 - **Hard limit: 20 qubits.** Garnet is a 20-qubit superconducting chip with a square-lattice (nearest-neighbor) coupling map. Native gates: `PRX` (single-qubit) and `CZ` (two-qubit, neighbors only). Two-qubit gates between non-neighbors need SWAPs, and SWAPs add noise.
 - **Design for hardware, not just for the simulator.** Keep circuits at about 4–16 qubits and shallow (few `CZ` layers). Choose entangling patterns that fit the lattice. For graph encodings (one qubit per account in an ego-net, `CZ` on transaction edges), check that the subgraph embeds in the coupling map, or transpile and report the SWAP count.
 - **Train on the simulator, evaluate on hardware.** Do the optimization loop on a classical simulator, preferably the noisy Garnet model (`IQMFakeGarnet` in `iqm-client[qiskit]`). Use Resonance for a small number of final runs: inference on the test split, a few kernel-matrix entries, or a noise comparison. Hardware runs cost quota and queue time. Batch many circuits into one job.
-- **SDK:** build and train circuits in PennyLane (the project default). To run on Garnet, export the trained circuit (for example as OpenQASM) and submit it with Qiskit through `iqm-client[qiskit]` (`uv add "iqm-client[qiskit]"`; the old `qiskit-iqm` package is deprecated). Read the server URL from the Resonance dashboard.
+- **SDK:** build and train circuits in PennyLane (the project default). To run on Garnet, build the same circuit in Qiskit and submit it through `iqm-client[qiskit]` (already a dependency; the old `qiskit-iqm` package is deprecated). The server URL is `https://resonance.iqm.tech` (set in `qpu_pick.py`).
 - **Credentials:** the Resonance API token goes in the `IQM_TOKEN` environment variable. **Never commit the token** or write it into notebooks.
 - Always report results from hardware next to results from noiseless and noisy simulation of the same circuit, with the shot count.
 
