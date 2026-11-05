@@ -162,6 +162,11 @@ Then open <http://localhost:7474> and try `cypher/aml_queries.cypher`. From Pyth
 `GraphDB().ego_subgraph(edge_id, hops=1, max_nodes=12)` returns a leakage-free ego-net
 (only transfers in the 24 h before the transaction) with nodes relabelled to qubit indices.
 
+A dataset summary with the schema, temporal split, motif examples and an ego-net, all queried from
+Neo4j, is in [`reports/HI-Small/README.md`](reports/HI-Small/README.md)
+(regenerate with `uv run python scripts/dataset_summary.py --name HI-Small`).
+The loader reads `NEO4J_PASSWORD` from the environment; `docker compose` also reads it from a git-ignored `.env`.
+
 ## Literature
 
 See [`literature/README.md`](literature/README.md) for an annotated reading list:
