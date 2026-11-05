@@ -8,7 +8,7 @@ See `README.md` for the dataset description and `literature/README.md` for the r
 
 - A 5-minute slide presentation. Judged on: **theoretical grounding** > novelty > presentation quality.
 - The argument must start from a **property of the data** (here: a directed temporal multigraph, extreme class imbalance, and laundering as subgraph motifs) and explain *mechanistically* why a quantum model helps with it (inductive bias, symmetry/equivariance, kernel alignment, sample complexity, qubit/memory efficiency).
-- A small prototype on a **classical simulator** of quantum circuits. Beating classical baselines is NOT required.
+- A small prototype on a **classical simulator** of quantum circuits. Beating classical baselines is NOT required. Optional extra: run the trained model on IQM Garnet (see "Quantum hardware" below).
 
 ## Rules for working in this repo
 
@@ -30,6 +30,17 @@ See `README.md` for the dataset description and `literature/README.md` for the r
 - IBM's `snapml` (Graph Feature Preprocessor) has no Windows/py3.12 wheel, so motif features live in `src/qlmaml/features.py`. Extend that file rather than adding a new feature module.
 - Reusable code goes in `src/qlmaml/`, runnable experiments in `scripts/`, exploration in `notebooks/` (runnable top to bottom). Each experiment writes a JSON to `results/<dataset>/`.
 - `uv run pytest` must pass before committing. `uv run python scripts/baseline.py --fake` is the end-to-end smoke test (synthetic data, never report its numbers).
+
+## Quantum hardware: IQM Garnet on IQM Resonance
+
+The team has access to real hardware through [IQM Resonance](https://resonance.iqm.tech/). The only device is **IQM Garnet**.
+
+- **Hard limit: 20 qubits.** Garnet is a 20-qubit superconducting chip with a square-lattice (nearest-neighbor) coupling map. Native gates: `PRX` (single-qubit) and `CZ` (two-qubit, neighbors only). Two-qubit gates between non-neighbors need SWAPs, and SWAPs add noise.
+- **Design for hardware, not just for the simulator.** Keep circuits at about 4–16 qubits and shallow (few `CZ` layers). Choose entangling patterns that fit the lattice. For graph encodings (one qubit per account in an ego-net, `CZ` on transaction edges), check that the subgraph embeds in the coupling map, or transpile and report the SWAP count.
+- **Train on the simulator, evaluate on hardware.** Do the optimization loop on a classical simulator, preferably the noisy Garnet model (`IQMFakeGarnet` in `iqm-client[qiskit]`). Use Resonance for a small number of final runs: inference on the test split, a few kernel-matrix entries, or a noise comparison. Hardware runs cost quota and queue time. Batch many circuits into one job.
+- **SDK:** build and train circuits in PennyLane (the project default). To run on Garnet, export the trained circuit (for example as OpenQASM) and submit it with Qiskit through `iqm-client[qiskit]` (`uv add "iqm-client[qiskit]"`; the old `qiskit-iqm` package is deprecated). Read the server URL from the Resonance dashboard.
+- **Credentials:** the Resonance API token goes in the `IQM_TOKEN` environment variable. **Never commit the token** or write it into notebooks.
+- Always report results from hardware next to results from noiseless and noisy simulation of the same circuit, with the shot count.
 
 ## Writing
 
