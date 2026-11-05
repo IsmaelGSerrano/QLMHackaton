@@ -99,3 +99,41 @@ def select_backend(
     s = seen[0]
     info = {"target": target, "alias": s["alias"], "mock": s["mock"], "price": s["price"], "queue": s["queue"]}
     return backend, transpiled, info
+
+
+def bell_circuit() -> QuantumCircuit:
+    """2-qubit Bell state (|00> + |11>)/sqrt(2), measured. The WP0 smoke test for each target."""
+    c = QuantumCircuit(2, name="bell")
+    c.h(0)
+    c.cx(0, 1)
+    c.measure_all()
+    return c
+
+
+BELL_THRESHOLD = 0.8
+
+
+def _bits(key: str) -> str:
+    return key.replace(" ", "")  # Qiskit separates classical registers with spaces
+
+
+def bell_counts_ok(counts: dict[str, int], threshold: float = BELL_THRESHOLD) -> bool:
+    """True when at least `threshold` of the shots are 00 or 11 (correlated outcomes).
+
+    Uniform counts (no entanglement, or a broken readout) give 0.5. IQMFakeGarnet gives
+    about 0.95; 0.8 is a loose bar for a smoke test, not a measured Garnet figure.
+    """
+    shots = sum(counts.values())
+    if shots == 0:
+        return False
+    correlated = sum(n for bits, n in counts.items() if _bits(bits) in ("00", "11"))
+    return correlated / shots >= threshold
+
+
+def mock_counts_ok(counts: dict[str, int], shots: int, width: int = 2) -> bool:
+    """True when every shot came back as a `width`-bit outcome.
+
+    Resonance `:mock` machines return random bitstrings (they do not simulate the circuit),
+    so a mock run can only prove the submit path, not the physics.
+    """
+    return sum(counts.values()) == shots and all(len(_bits(b)) == width for b in counts)
