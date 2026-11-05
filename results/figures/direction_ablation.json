@@ -1,0 +1,27 @@
+{
+  "draws": 200,
+  "p": 1,
+  "seed": 0,
+  "pairs": {
+    "FAN-OUT vs FAN-IN": {
+      "zx": {
+        "max_abs_diff": 1.0044917157782118,
+        "median_abs_diff": 0.233091454661215
+      },
+      "rzz": {
+        "max_abs_diff": 0.0,
+        "median_abs_diff": 0.0
+      }
+    },
+    "CYCLE vs no-return triangle": {
+      "zx": {
+        "max_abs_diff": 1.2341470959992344,
+        "median_abs_diff": 0.0694697119481329
+      },
+      "rzz": {
+        "max_abs_diff": 0.0,
+        "median_abs_diff": 0.0
+      }
+    }
+  }
+}
