@@ -22,11 +22,14 @@ See `README.md` for the dataset description and `literature/README.md` for the r
 
 ## Tooling (default choices; change them here if the team decides otherwise)
 
-- Python 3.12 in `.venv`, polars for data, XGBoost for the classical baseline, PennyLane for circuits. Add PyTorch Geometric only if we actually train a GNN.
+- **Python dependencies are managed with `uv` and `pyproject.toml` only.** Never use `pip install`, `python -m venv`, or a `requirements.txt`.
+  - Add a library: `uv add <package>` (dev-only tools: `uv add --group dev <package>`).
+  - Create/refresh the environment: `uv sync`. Commit `uv.lock`.
+  - Run anything: `uv run python ...`, `uv run pytest`, `uv run jupyter lab`.
+- Python 3.12, polars for data, XGBoost for the classical baseline, PennyLane for circuits. Add PyTorch Geometric only if we actually train a GNN.
 - IBM's `snapml` (Graph Feature Preprocessor) has no Windows/py3.12 wheel, so motif features live in `src/qlmaml/features.py`. Extend that file rather than adding a new feature module.
 - Reusable code goes in `src/qlmaml/`, runnable experiments in `scripts/`, exploration in `notebooks/` (runnable top to bottom). Each experiment writes a JSON to `results/<dataset>/`.
-- `python -m pytest` must pass before committing. `python scripts/baseline.py --fake` is the end-to-end smoke test (synthetic data, never report its numbers).
-- Add new dependencies to `requirements.txt`.
+- `uv run pytest` must pass before committing. `uv run python scripts/baseline.py --fake` is the end-to-end smoke test (synthetic data, never report its numbers).
 
 ## Writing
 

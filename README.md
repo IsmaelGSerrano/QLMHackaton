@@ -62,11 +62,7 @@ Note: the two `Account` columns have the same header. Rename them (for example `
 The data is **not** committed to git. Download it to `data/raw/`:
 
 ```bash
-pip install kaggle
-```
-
-```bash
-kaggle datasets download -d ealtman2019/ibm-transactions-for-anti-money-laundering-aml -p data/raw --unzip
+uv run kaggle datasets download -d ealtman2019/ibm-transactions-for-anti-money-laundering-aml -p data/raw --unzip
 ```
 
 You need a Kaggle API token in `~/.kaggle/kaggle.json`. You can also download the files by hand from the Kaggle page.
@@ -77,8 +73,8 @@ You need a Kaggle API token in `~/.kaggle/kaggle.json`. You can also download th
 .
 ├── README.md            # This file
 ├── CLAUDE.md            # Guidance for Claude Code / AI assistants working in this repo
-├── requirements.txt     # Python dependencies (pip install -r requirements.txt)
-├── pyproject.toml       # Makes `qlmaml` importable (pip install -e .)
+├── pyproject.toml       # Project metadata and dependencies (managed with uv)
+├── uv.lock              # Locked dependency versions (commit it)
 ├── src/qlmaml/          # Reusable code
 │   ├── data.py          #   load *_Trans.csv, node ids, temporal split, parse *_Patterns.txt
 │   ├── features.py      #   per-transaction motif/activity features (fan-in/out, cycles, ...)
@@ -93,28 +89,29 @@ You need a Kaggle API token in `~/.kaggle/kaggle.json`. You can also download th
 
 ## Setup and running the baseline
 
-```bash
-python -m venv .venv && .venv/Scripts/activate   # Windows; use source .venv/bin/activate elsewhere
-```
+We use [uv](https://docs.astral.sh/uv/) for everything Python. Install it once, then:
 
 ```bash
-pip install -r requirements.txt && pip install -e .
+uv sync
 ```
 
+That creates `.venv` from `pyproject.toml` + `uv.lock`. Add a dependency with `uv add <package>`;
+never edit a requirements file or `pip install` by hand.
+
 ```bash
-python -m pytest
+uv run pytest
 ```
 
 Smoke test on synthetic data (no download needed; the numbers mean nothing):
 
 ```bash
-python scripts/baseline.py --fake
+uv run python scripts/baseline.py --fake
 ```
 
 Real baseline on HI-Small (needs the Kaggle data in `data/raw/`):
 
 ```bash
-python scripts/baseline.py data/raw/HI-Small_Trans.csv
+uv run python scripts/baseline.py data/raw/HI-Small_Trans.csv
 ```
 
 The script does a day-based 60/20/20 temporal split (same recipe as IBM's Multi-GNN), builds
