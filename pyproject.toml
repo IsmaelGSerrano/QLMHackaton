@@ -21,6 +21,7 @@ dependencies = [
     "kaggle>=1.6",
     "matplotlib>=3.9",
     "tqdm>=4.66",
+    "neo4j>=5.20",
 ]
 
 [dependency-groups]

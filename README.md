@@ -120,6 +120,25 @@ amounts, 2- and 3-cycles), trains XGBoost with early stopping on validation, pic
 validation, and reports PR-AUC, minority-class F1 and recall at 0.1% / 1% FPR on test.
 Results go to `results/<dataset>/baseline_xgb.json`.
 
+## Graph database (Neo4j)
+
+The transactions also load into a local Neo4j (Docker) as a property graph, for exploring
+motifs visually and for extracting small subgraphs for quantum encodings. The model is in
+`src/qlmaml/graphdb.py`:
+
+- `(:Account)-[:TRANSFER]->(:Account)`: one relationship per transaction (keeps the multigraph), with label, split and pattern id.
+- `(:Account)-[:SENDS_TO]->(:Account)`: parallel edges collapsed per account pair and temporal split (the simple graph, one qubit per account).
+- `(:Account)-[:AT_BANK]->(:Bank)`, and `(:LaunderingAttempt {pattern})-[:INVOLVES]->(:Account)` from `*_Patterns.txt`.
+
+```bash
+export NEO4J_PASSWORD=<any local password>
+uv run python scripts/neo4j_load.py data/raw/HI-Small_Trans.csv --run
+```
+
+Then open <http://localhost:7474> and try `cypher/aml_queries.cypher`. From Python,
+`GraphDB().ego_subgraph(edge_id, hops=1, max_nodes=12)` returns a leakage-free ego-net
+(only transfers in the 24 h before the transaction) with nodes relabelled to qubit indices.
+
 ## Literature
 
 See [`literature/README.md`](literature/README.md) for an annotated reading list:
