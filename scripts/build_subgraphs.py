@@ -6,7 +6,8 @@ Usage:
     uv run python scripts/build_subgraphs.py --fake                # synthetic data, no Neo4j
 
 Writes data/processed/subgraphs_<name>_n<k>.parquet (git-ignored) and a
-summary JSON next to it: counts per split and label, positive:negative ratio,
+summary JSON next to it (and, for real data, in reports/<name>/subgraphs_n<k>.json):
+counts per split and label, positive:negative ratio,
 how many attempts were cut at the qubit cap, which positives were dropped
 for lack of matching negatives (by pattern), and how well negatives match the
 positives on edge count. Training and hardware scripts read the parquet and
@@ -94,6 +95,10 @@ def main() -> None:
             path = write_cache(ds.samples, OUT / f"subgraphs_{args.name}_n{k}.parquet", usd_rates=rates)
             summary = summarize(ds, args, k)
             path.with_suffix(".json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+            if not args.fake:  # counts only, no data: committed so slide numbers are traceable
+                report = ROOT / "reports" / args.name / f"subgraphs_n{k}.json"
+                report.parent.mkdir(parents=True, exist_ok=True)
+                report.write_text(json.dumps(summary, indent=2), encoding="utf-8")
             print(f"n={k}: {summary['positives']} pos, {summary['negatives']} neg {summary['negatives_by_kind']}, "
                   f"{summary['dropped_positives']} dropped {summary['dropped_by_pattern']}, "
                   f"{summary['attempts_cut']} cut ({time.time() - t0:.0f}s) -> {path}")

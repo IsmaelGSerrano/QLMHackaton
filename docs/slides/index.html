@@ -41,7 +41,7 @@
   <p class="kicker">ExtremeData4QML hackathon · IBM AML, HI-Small</p>
   <h1>Laundering as directed motifs</h1>
   <p class="muted">A small quantum graph classifier on transaction subgraphs</p>
-  <p class="src">Deck in progress: dataset section drafted. Numbers marked <span class="tbd">TBD</span> come from the running HI-Small build.</p>
+  <p class="src">Deck in progress: dataset section drafted.</p>
   <aside class="notes">Title. The talk follows the data: laundering is a directed subgraph motif, so we classify small directed subgraphs, one qubit per account.</aside>
 </section>
 
@@ -110,6 +110,7 @@
   <p style="font-size:.6em;text-align:left;margin:.2em 6%">
     Before the fix, <span class="laund">82 of 370</span> positives (n = 8) got no negative at all: BIPARTITE 28/49, STACK 27/43.
     Fix: build those negatives <span class="pairs">like positives</span>, from a few unrelated normal transfers in a window as long as the attempt.
+    After: <span class="pairs">BIPARTITE 49/49, STACK 41/43</span> kept.
   </p>
   <aside class="notes">An ego-net grows from one transaction by adding neighbours, so it is always connected: n accounts need at least n minus 1 gates. Many BIPARTITE and STACK attempts are separate sender-receiver pairs. Without a fix, separate pairs exist only on the laundering side, and a model could learn "disconnected means laundering". The pairs sampler closes that gap. Positives that are small and very dense still cannot be matched, and we drop them (next slide).</aside>
 </section>
@@ -121,15 +122,17 @@
   <table>
     <thead><tr><th></th><th>n = 8 (Garnet)</th><th>n = 12 (simulator)</th></tr></thead>
     <tbody>
-      <tr><td>Positives kept / 370</td><td><span class="tbd">TBD</span></td><td><span class="tbd">TBD</span></td></tr>
-      <tr><td>Attempts cut at the cap</td><td><span class="tbd">TBD</span></td><td><span class="tbd">TBD</span></td></tr>
-      <tr><td>Negatives: ego-net / pairs</td><td><span class="tbd">TBD</span></td><td><span class="tbd">TBD</span></td></tr>
-      <tr><td>Dropped positives (no 5 matches)</td><td><span class="tbd">TBD</span></td><td><span class="tbd">TBD</span></td></tr>
-      <tr><td>Train / val / test positives</td><td><span class="tbd">TBD</span></td><td><span class="tbd">TBD</span></td></tr>
+      <tr><td>Positives kept / 370</td><td>334</td><td>321</td></tr>
+      <tr><td>Attempts cut at the cap</td><td>171</td><td>106</td></tr>
+      <tr><td>Negatives (1 : 5): ego-net / pairs</td><td>1,399 / 271</td><td>1,340 / 265</td></tr>
+      <tr><td>Gate count matched exactly / within 1</td><td>76 % / 24 %</td><td>73 % / 27 %</td></tr>
+      <tr><td>Dropped: small or dense, no normal look-alike</td><td>36</td><td>49 (21 SCATTER-GATHER)</td></tr>
+      <tr><td>Train / val / test positives</td><td>199 / 65 / 70</td><td>190 / 63 / 68</td></tr>
     </tbody>
   </table>
-  <p class="src" style="margin-top:1em">Temporal split 60 / 20 / 20 by subgraph start time, as in [1, 2]: train on earlier, test on later transactions.</p>
-  <aside class="notes">These are the numbers from the HI-Small build. Say how many positives were dropped and which motifs they come from: they are small, dense subgraphs that no normal subgraph resembles.</aside>
+  <p class="src" style="margin-top:1em">Temporal split 60 / 20 / 20 by subgraph start time, as in [1, 2]: train on earlier, test on later transactions.
+    Account counts match exactly between classes. 88 of 370 attempts are a single account pair (1–2 transfers).</p>
+  <aside class="notes">Numbers from the HI-Small build. Every positive has exactly 5 negatives with the same number of accounts. The drops are small, dense subgraphs, for example 4 accounts with 9 to 12 gates, or large SCATTER-GATHER attempts at 12 qubits: no normal subgraph looks like them. A quarter of the attempts are a single pair of accounts; on 2 qubits the model can only use amounts, direction and counts.</aside>
 </section>
 
 <!-- ======================================================================= -->
@@ -138,7 +141,8 @@
   <h2>Known limits of the dataset</h2>
   <ul style="text-align:left;font-size:.8em">
     <li><b>Subsampling:</b> attempts above the qubit cap are cut in time</li>
-    <li><b>Drops:</b> small, dense positives with no normal look-alike are removed and reported by motif</li>
+    <li><b>Drops:</b> small, dense positives with no normal look-alike are removed: 36 at n = 8, 49 at n = 12, reported by motif</li>
+    <li><b>Tiny attempts:</b> 88 of 370 attempts are one account pair with 1–2 transfers, as listed in the patterns file</li>
     <li><b>Split boundary:</b> no gap between splits; a subgraph that starts just before a cut can include later transfers</li>
     <li><b>Window length:</b> ego-net negatives look back 1 day; positives last as long as the attempt. The circuit uses timestamps only to order gates</li>
     <li><b>Stricter negatives:</b> no laundering transfer anywhere in a negative, not only at its center</li>
