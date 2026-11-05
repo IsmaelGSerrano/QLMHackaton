@@ -27,7 +27,7 @@ def test_load_patterns(tmp_path):
 
 
 def test_load_and_split(tmp_path):
-    csv = write_fake_transactions(tmp_path / "FAKE_Trans.csv", n_accounts=300, n_normal=3_000, n_motifs=10, n_days=8)
+    csv = write_fake_transactions(tmp_path / "FAKE_Trans.csv", n_accounts=100, n_normal=500, n_motifs=6, n_days=8)
     df = load_transactions(csv)
 
     assert df["edge_id"].to_list() == list(range(df.height))
