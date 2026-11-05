@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Which Way the Money Flows</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (~44rem) with wider "lab" panels; money = amber arrows, qubits = teal wires. */
+:root {
+  --bg: #f2f4f6;
+  --surface: #ffffff;
+  --fg: #15212b;
+  --muted: #5a6875;
+  --line: #d3dbe2;
+  --money: #b86e0b;
+  --qubit: #11777f;
+  --same: #b0412f;
+  --diff: #2c7a4b;
+  --chip: #e6ebef;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e151b; --surface: #16202a; --fg: #e3e9ee; --muted: #93a3b1; --line: #2b3945;
+    --money: #e9a447; --qubit: #45b8c1; --same: #e5735f; --diff: #5fc18a; --chip: #213040;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e151b; --surface: #16202a; --fg: #e3e9ee; --muted: #93a3b1; --line: #2b3945;
+  --money: #e9a447; --qubit: #45b8c1; --same: #e5735f; --diff: #5fc18a; --chip: #213040;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 80px;
+}
+main { max-width: 64rem; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+.prose { max-width: 44rem; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2.2rem, 6vw, 3.6rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: clamp(1.5rem, 3.4vw, 2rem); font-weight: 700; }
+h3 { font-size: 1.1rem; font-weight: 500; }
+p { margin: 0; }
+section { display: flex; flex-direction: column; gap: 18px; }
+.eyebrow { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.15rem; color: var(--muted); max-width: 40rem; }
+code, .mono { font-family: var(--mono); font-size: 0.92em; }
+code { background: var(--chip); padding: 1px 5px; border-radius: 4px; }
+.money { color: var(--money); font-weight: 600; }
+.qubit { color: var(--qubit); font-weight: 600; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; }
+.row { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.row > * { min-width: 0; }
+svg { display: block; max-width: 100%; height: auto; }
+svg text { fill: var(--fg); font-family: var(--mono); }
+
+/* hero diagram */
+.hero { display: grid; gap: 28px; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: center; }
+@media (max-width: 760px) { .hero { grid-template-columns: 1fr; } }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.88rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--fg); background: var(--surface); display: inline-block; }
+.arrow { width: 22px; height: 2px; background: var(--money); position: relative; display: inline-block; }
+.arrow::after { content: ""; position: absolute; right: -2px; top: -4px; border-left: 7px solid var(--money); border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+
+/* motifs */
+.motifs { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 700px) { .motifs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.motif { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.motif.pair { border-color: var(--money); }
+.motif b { font-family: var(--mono); font-size: 0.8rem; letter-spacing: 0.04em; }
+.motif small { color: var(--muted); font-size: 0.82rem; line-height: 1.4; }
+
+/* mapping */
+.map { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: 12px; align-items: center; }
+.map .to { font-family: var(--mono); color: var(--muted); }
+@media (max-width: 600px) { .map { grid-template-columns: 1fr; } .map .to { transform: rotate(90deg); justify-self: center; } }
+
+/* controls */
+.controls { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: flex-end; }
+.ctl { display: flex; flex-direction: column; gap: 6px; }
+.ctl > span { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { font: inherit; font-size: 0.9rem; background: var(--surface); color: var(--fg); border: 0; border-right: 1px solid var(--line); padding: 7px 12px; cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.seg button:focus-visible, input:focus-visible { outline: 2px solid var(--qubit); outline-offset: 2px; }
+input[type=range] { width: 200px; accent-color: var(--qubit); }
+.side h3 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.side h3 small { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); font-weight: 400; }
+.side { display: flex; flex-direction: column; gap: 12px; }
+.scroll { overflow-x: auto; }
+.bars { display: flex; flex-direction: column; gap: 6px; }
+.bar { display: grid; grid-template-columns: 1.6rem 1fr 3.4rem; gap: 8px; align-items: center; font-family: var(--mono); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.bar .track { height: 12px; background: var(--chip); border-radius: 3px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--qubit); transition: width .25s; }
+.verdict { border-radius: 8px; padding: 14px 16px; border: 1px solid; display: flex; gap: 12px; align-items: flex-start; }
+.verdict.same { border-color: var(--same); color: var(--same); }
+.verdict.diff { border-color: var(--diff); color: var(--diff); }
+.verdict p { color: var(--fg); }
+.verdict strong { font-family: var(--display); font-size: 1.1rem; display: block; }
+.pill { font-family: var(--mono); font-size: 0.75rem; padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+.gatecard { font-size: 0.92rem; color: var(--muted); }
+.gatecard b { color: var(--fg); }
+
+/* decision table */
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+td.pick { color: var(--diff); font-weight: 600; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 10px 20px; margin: 0; }
+dt { font-family: var(--mono); font-weight: 500; }
+dd { margin: 0; color: var(--muted); }
+@media (max-width: 560px) { dl { grid-template-columns: 1fr; gap: 2px; } dd { margin-bottom: 10px; } }
+ul.tight { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 6px; }
+@media (prefers-reduced-motion: reduce) { .bar .fill { transition: none; } }
+</style>
+</head>
+<body>
+
+<main>
+
+<header class="hero">
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="eyebrow">ExtremeData4QML · Issue #1 · Point 1</div>
+    <h1>Which way does the money flow?</h1>
+    <p class="lede">A visual guide to the "edge direction" decision: why the usual quantum graph circuit cannot see which account paid which, and what we have to choose to fix it.</p>
+  </div>
+  <div class="panel">
+    <svg viewBox="0 0 320 200" role="img" aria-label="Small transaction graph: accounts as circles, payments as arrows">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--money)"/></marker></defs>
+      <g id="heroEdges"></g><g id="heroNodes"></g>
+    </svg>
+    <div class="legend"><span><i class="dot"></i>account</span><span><i class="arrow"></i>transaction (payer → payee)</span></div>
+  </div>
+</header>
+
+<section class="prose">
+  <div class="eyebrow">Step 1 · The data</div>
+  <h2>AML data is a picture of who paid whom</h2>
+  <p><b>AML</b> means <b>Anti-Money Laundering</b>. Money laundering is moving criminal money through many accounts until it looks legitimate. Our dataset (IBM's synthetic AML transactions, HI-Small) is a long list of bank transfers, and a few of them are labelled as laundering, about <b>1 in 1,000</b>.</p>
+  <p>Draw each <b>account as a dot</b> and each <span class="money">transaction as an arrow</span> from the payer to the payee, and you get a graph like the one above. The arrow has a direction: "A paid B" is a different fact from "B paid A".</p>
+</section>
+
+<section>
+  <div class="prose" style="display:flex;flex-direction:column;gap:12px">
+    <div class="eyebrow">Step 2 · What laundering looks like</div>
+    <h2>Laundering leaves shapes in the graph</h2>
+    <p>The dataset's pattern file lists 370 laundering attempts, each one a small shape of 8 types. Look at the two outlined ones: <b>FAN-OUT</b> and <b>FAN-IN</b> have <i>exactly the same shape</i>. The only difference is the direction of the arrows.</p>
+  </div>
+  <div class="motifs" id="motifs"></div>
+</section>
+
+<section>
+  <div class="prose" style="display:flex;flex-direction:column;gap:12px">
+    <div class="eyebrow">Step 3 · Graph to quantum circuit</div>
+    <h2>Each account becomes a qubit, each payment becomes a gate</h2>
+    <p>Our plan (Option B, after Skolik et al.) builds the circuit directly from the subgraph. Every account gets one <span class="qubit">qubit</span>, drawn as a horizontal wire. Every transaction becomes a <b>two-qubit gate</b> that connects the wires of the two accounts. The circuit's shape <i>is</i> the graph's shape.</p>
+  </div>
+  <div class="panel map">
+    <svg viewBox="0 0 200 140" aria-label="Fan-out graph: A pays B, C and D"><g id="mapGraph"></g></svg>
+    <div class="to">→</div>
+    <div class="scroll"><svg viewBox="0 0 300 150" aria-label="Circuit for the same graph"><g id="mapCirc"></g></svg></div>
+  </div>
+  <p class="prose">Every wire starts in the same small rotation (in the real model this is where account features go). Then the gates run, then we measure each qubit. The pattern of measured values is what the classifier sees.</p>
+</section>
+
+<section>
+  <div class="prose" style="display:flex;flex-direction:column;gap:12px">
+    <div class="eyebrow">Step 4 · The problem, live</div>
+    <h2>Try it: can the circuit tell the two shapes apart?</h2>
+    <p>Pick a pair of shapes and a gate. The page simulates both circuits for real (a small state-vector simulator runs in your browser) and compares the outputs. With the usual gate <code>RZZ</code>, the two outputs are <b>always identical</b>, whatever the angle. Switch to a directed gate and they split.</p>
+  </div>
+  <div class="panel" style="display:flex;flex-direction:column;gap:20px">
+    <div class="controls">
+      <div class="ctl"><span>Shapes</span>
+        <div class="seg" id="pairSeg">
+          <button type="button" id="pair-fan" data-v="fan" aria-pressed="true">Fan-out vs fan-in</button>
+          <button type="button" id="pair-tri" data-v="tri" aria-pressed="false">Cycle vs no-return triangle</button>
+        </div></div>
+      <div class="ctl"><span>Gate per transaction</span>
+        <div class="seg" id="gateSeg">
+          <button type="button" id="gate-rzz" data-v="rzz" aria-pressed="true">RZZ (symmetric)</button>
+          <button type="button" id="gate-zx" data-v="zx" aria-pressed="false">ZX (directed)</button>
+          <button type="button" id="gate-cry" data-v="cry" aria-pressed="false">CRY (directed)</button>
+        </div></div>
+      <div class="ctl"><label for="theta"><span class="eyebrow">Gate angle θ = <b class="mono" id="thetaVal">0.70</b></span></label>
+        <input type="range" id="theta" min="0" max="1.57" step="0.01" value="0.70"></div>
+    </div>
+    <p class="gatecard" id="gateCard"></p>
+    <div class="row">
+      <div class="side" id="sideA"></div>
+      <div class="side" id="sideB"></div>
+    </div>
+    <div class="verdict" id="verdict"></div>
+  </div>
+</section>
+
+<section class="prose">
+  <div class="eyebrow">Why RZZ fails</div>
+  <h2>A symmetric gate erases the arrow</h2>
+  <p><code>RZZ</code> (and <code>CZ</code>) treat both qubits the same way: swap the two wires and you get the same gate. So "A pays B" and "B pays A" put the <i>same</i> gate in the circuit. Flip every arrow in a fan-out and you get a fan-in, but the circuit has not changed at all. It is not that the model fails to learn the difference; the difference never reaches the model.</p>
+  <p>A <b>directed</b> gate has two different ends. In <code>ZX</code> the payer gets a <b>Z</b> and the payee gets an <b>X</b>. In <code>CRY</code> the payer is the control and the payee gets rotated. Reverse the arrow and you get a different gate, so different shapes give different outputs.</p>
+</section>
+
+<section>
+  <div class="prose" style="display:flex;flex-direction:column;gap:12px">
+    <div class="eyebrow">Step 5 · The catch: gate order</div>
+    <h2>Directed gates care about which one runs first</h2>
+    <p><code>RZZ</code> gates can run in any order and give the same result. Directed gates cannot, when one account both <b>receives and pays</b>, which is exactly what a laundering middle-man does. Below, B receives from A and pays C. Swap the order of the two gates and the output changes.</p>
+    <p>So we need a fixed rule for the order, and the rule must not depend on how we named the accounts. <b>Use the transaction timestamp.</b> Money moves in time, so the circuit applies the gates in the order the money actually moved.</p>
+  </div>
+  <div class="panel" style="display:flex;flex-direction:column;gap:20px">
+    <div class="controls">
+      <div class="ctl"><span>Gate</span>
+        <div class="seg" id="ordGateSeg">
+          <button type="button" id="ord-rzz" data-v="rzz" aria-pressed="false">RZZ</button>
+          <button type="button" id="ord-zx" data-v="zx" aria-pressed="true">ZX</button>
+        </div></div>
+    </div>
+    <div class="row">
+      <div class="side" id="ordA"></div>
+      <div class="side" id="ordB"></div>
+    </div>
+    <div class="verdict" id="ordVerdict"></div>
+  </div>
+</section>
+
+<section>
+  <div class="prose" style="display:flex;flex-direction:column;gap:12px">
+    <div class="eyebrow">Step 6 · Amount, time and repeated payments</div>
+    <h2>What sets the angle, and what to do with repeat payments</h2>
+    <p>Each gate has an angle θ. We set it from the transaction, for example <code>θ = w · log(amount)</code>. The weight <code>w</code> is learned during training and is the <b>same for every edge</b>: that keeps the circuit fair to every account, so renaming accounts does not change the answer.</p>
+    <p>Two accounts often have several transactions between them (the graph is a <i>multigraph</i>). We have to pick one of two ways to handle that:</p>
+  </div>
+  <div class="row">
+    <div class="panel side">
+      <h3>Merge them <small>recommended</small></h3>
+      <svg viewBox="0 0 260 90" aria-label="Three payments from A to B merged into one gate"><g id="mergeSvg"></g></svg>
+      <ul class="tight"><li>One gate per pair of accounts, angle from the <b>total</b> amount.</li><li>The <b>count</b> of payments goes in as an extra feature.</li><li>Shallow circuit: 2 <code>CZ</code> per pair on Garnet.</li></ul>
+    </div>
+    <div class="panel side">
+      <h3>One gate per payment <small>more detail, more noise</small></h3>
+      <svg viewBox="0 0 260 90" aria-label="Three payments from A to B as three gates"><g id="splitSvg"></g></svg>
+      <ul class="tight"><li>Keeps each amount and timestamp.</li><li>3 payments cost 6 <code>CZ</code> instead of 2.</li><li>Every extra <code>CZ</code> adds noise on real hardware.</li></ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="prose" style="display:flex;flex-direction:column;gap:12px">
+    <div class="eyebrow">The decision</div>
+    <h2>Three things to choose</h2>
+  </div>
+  <div class="panel tbl">
+    <table>
+      <thead><tr><th>Choice</th><th>Options</th><th>Recommendation</th></tr></thead>
+      <tbody>
+        <tr><td><b>1. Gate for a transaction</b></td><td><code>ZX</code> · <code>CRY</code> · keep <code>RZZ</code> and add in/out-degree as per-account features</td><td class="pick">ZX. Same hardware cost as RZZ (2 CZ) and closest to Skolik's design. The degree-feature fallback only gives per-account counts, so it is a weaker story.</td></tr>
+        <tr><td><b>2. Gate order</b></td><td>Timestamp order · any order fixed by account name</td><td class="pick">Timestamp order. It does not depend on account names, and it follows the money.</td></tr>
+        <tr><td><b>3. Angle and repeats</b></td><td>θ from amount, time or both · merge repeats or one gate each</td><td class="pick">θ = w · log(amount), merge repeats, add the count as a feature.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose">The pitch for the judges: <i>laundering is a directed shape in time; our circuit is built from that shape, with direction, time and amount inside the gates.</i></p>
+</section>
+
+<section>
+  <div class="eyebrow">Words used on this page</div>
+  <div class="panel">
+    <dl>
+      <dt>Qubit</dt><dd>The quantum version of a bit. Here: one qubit per account.</dd>
+      <dt>Gate</dt><dd>An operation on qubits. A two-qubit gate links two accounts.</dd>
+      <dt>RZZ, CZ</dt><dd>Symmetric two-qubit gates: both ends are treated the same, so they cannot show direction.</dd>
+      <dt>ZX, CRY</dt><dd>Directed two-qubit gates: the payer end and the payee end are different.</dd>
+      <dt>θ (angle)</dt><dd>How strongly a gate acts. We set it from the transaction amount.</dd>
+      <dt>Equivariance</dt><dd>Renaming the accounts does not change the answer. It is why the model needs fewer labelled examples.</dd>
+      <dt>IQM Garnet</dt><dd>The 20-qubit real quantum computer we can use. Its only native two-qubit gate is CZ, between neighbouring qubits.</dd>
+    </dl>
+  </div>
+</section>
+
+</main>
+
+<script>
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+
+  // ---------- tiny state-vector simulator ----------
+  function simulate(n, ops) {
+    const N = 1 << n;
+    const re = new Float64Array(N), im = new Float64Array(N);
+    re[0] = 1;
+    for (const [g, a, b, t] of ops) {
+      if (g === "ry" || g === "cry") {
+        const half = g === "ry" ? t / 2 : t;
+        const c = Math.cos(half), s = Math.sin(half);
+        const tq = g === "ry" ? a : b, m = 1 << tq, mc = g === "cry" ? 1 << a : 0;
+        for (let x = 0; x < N; x++) {
+          if (x & m) continue;
+          if (mc && !(x & mc)) continue;
+          const y = x | m, r0 = re[x], i0 = im[x], r1 = re[y], i1 = im[y];
+          re[x] = c * r0 - s * r1; im[x] = c * i0 - s * i1;
+          re[y] = s * r0 + c * r1; im[y] = s * i0 + c * i1;
+        }
+      } else if (g === "h") {
+        const k = Math.SQRT1_2, m = 1 << a;
+        for (let x = 0; x < N; x++) {
+          if (x & m) continue;
+          const y = x | m, r0 = re[x], i0 = im[x], r1 = re[y], i1 = im[y];
+          re[x] = k * (r0 + r1); im[x] = k * (i0 + i1);
+          re[y] = k * (r0 - r1); im[y] = k * (i0 - i1);
+        }
+      } else if (g === "rzz") {
+        const c = Math.cos(t), s = Math.sin(t);
+        for (let x = 0; x < N; x++) {
+          const z = (((x >> a) & 1) ^ ((x >> b) & 1)) ? -1 : 1;
+          const r = re[x], i = im[x];
+          re[x] = c * r + z * s * i; im[x] = c * i - z * s * r;
+        }
+      } else if (g === "zx") {
+        const c = Math.cos(t), s = Math.sin(t), mr = 1 << b;
+        const R = re.slice(), I = im.slice();
+        for (let x = 0; x < N; x++) {
+          const z = ((x >> a) & 1) ? -1 : 1, y = x ^ mr;
+          re[x] = c * R[x] + z * s * I[y]; im[x] = c * I[x] - z * s * R[y];
+        }
+      }
+    }
+    const p = [];
+    for (let q = 0; q < n; q++) {
+      let s = 0;
+      for (let x = 0; x < N; x++) if ((x >> q) & 1) s += re[x] * re[x] + im[x] * im[x];
+      p.push(s);
+    }
+    return p;
+  }
+  const ALPHA = 1.0;
+  function runCircuit(n, edges, gate, theta) {
+    const ops = [];
+    for (let q = 0; q < n; q++) ops.push(["ry", q, 0, ALPHA]);
+    for (const e of edges) ops.push([gate, e[0], e[1], theta]);
+    for (let q = 0; q < n; q++) ops.push(["h", q]);
+    return simulate(n, ops);
+  }
+  const gap = (p, q) => {
+    const a = [...p].sort(), b = [...q].sort();
+    let m = 0; for (let i = 0; i < a.length; i++) m = Math.max(m, Math.abs(a[i] - b[i]));
+    return m;
+  };
+
+  // ---------- drawing helpers ----------
+  const NAMES = "ABCDEFGH";
+  function arrowMarker(svg, id) {
+    const defs = el("defs", {}, svg);
+    const m = el("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0,0 L10,5 L0,10 z", style: "fill:var(--money)" }, m);
+  }
+  let markerCount = 0;
+  function drawGraph(g, pos, edges, opts = {}) {
+    const r = opts.r || 11;
+    const svg = g.ownerSVGElement;
+    const mid = "m" + (markerCount++);
+    arrowMarker(svg, mid);
+    edges.forEach((e, k) => {
+      const [x1, y1] = pos[e[0]], [x2, y2] = pos[e[1]];
+      const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy) || 1;
+      const ox = (opts.curve && opts.curve[k]) || 0;
+      const sx = x1 + dx / L * r, sy = y1 + dy / L * r, ex = x2 - dx / L * (r + 2), ey = y2 - dy / L * (r + 2);
+      if (ox) {
+        const cx = (sx + ex) / 2 - dy / L * ox, cy = (sy + ey) / 2 + dx / L * ox;
+        el("path", { d: `M${sx},${sy} Q${cx},${cy} ${ex},${ey}`, fill: "none", style: "stroke:var(--money)", "stroke-width": opts.sw || 2, "marker-end": `url(#${mid})` }, g);
+      } else {
+        el("line", { x1: sx, y1: sy, x2: ex, y2: ey, style: "stroke:var(--money)", "stroke-width": opts.sw || 2, "marker-end": `url(#${mid})` }, g);
+      }
+      if (opts.times) {
+        const tx = (x1 + x2) / 2 - dy / L * 12, ty = (y1 + y2) / 2 + dx / L * 12 + 4;
+        el("text", { x: tx, y: ty, "text-anchor": "middle", "font-size": 11, style: "fill:var(--muted)" }, g, opts.times[k]);
+      }
+    });
+    pos.forEach((p, i) => {
+      el("circle", { cx: p[0], cy: p[1], r, style: "fill:var(--surface);stroke:var(--fg)", "stroke-width": 2 }, g);
+      if (opts.labels !== false) el("text", { x: p[0], y: p[1] + 4, "text-anchor": "middle", "font-size": Math.round(r * 1.05), "font-weight": 500 }, g, (opts.names || NAMES)[i]);
+    });
+  }
+
+  function drawCircuit(g, n, edges, gate, opts = {}) {
+    const top = 20, gapY = opts.gapY || 30, x0 = 34, col = opts.col || 46;
+    const W = x0 + (edges.length + 2) * col + 10;
+    const svg = g.ownerSVGElement;
+    svg.setAttribute("viewBox", `0 0 ${W} ${top + (n - 1) * gapY + 22}`);
+    const y = q => top + q * gapY;
+    for (let q = 0; q < n; q++) {
+      el("text", { x: 8, y: y(q) + 4, "font-size": 12, "font-weight": 500 }, g, NAMES[q]);
+      el("line", { x1: x0 - 8, y1: y(q), x2: W - 6, y2: y(q), style: "stroke:var(--qubit)", "stroke-width": 1.6 }, g);
+      box(x0 + col * 0.5, y(q), "ry", "muted");
+      box(x0 + col * (edges.length + 1.5), y(q), "M", "muted");
+    }
+    function box(cx, cy, label, tone) {
+      const w = label.length > 2 ? 30 : 22;
+      el("rect", { x: cx - w / 2, y: cy - 10, width: w, height: 20, rx: 3, style: `fill:var(--surface);stroke:var(--${tone === "muted" ? "line" : "fg"})`, "stroke-width": 1.4 }, g);
+      el("text", { x: cx, y: cy + 4, "text-anchor": "middle", "font-size": 11, style: tone === "muted" ? "fill:var(--muted)" : "" }, g, label);
+    }
+    edges.forEach((e, k) => {
+      const cx = x0 + col * (k + 1.5), [s, r] = e;
+      el("line", { x1: cx, y1: y(s), x2: cx, y2: y(r), style: "stroke:var(--fg)", "stroke-width": 1.6 }, g);
+      if (gate === "rzz") {
+        [s, r].forEach(q => el("circle", { cx, cy: y(q), r: 5, style: "fill:var(--fg)" }, g));
+        el("text", { x: cx + 6, y: (y(s) + y(r)) / 2 + 4, "font-size": 10, style: "fill:var(--muted)" }, g, "ZZ");
+      } else if (gate === "zx") {
+        box(cx, y(s), "Z"); box(cx, y(r), "X");
+      } else if (gate === "cry") {
+        el("circle", { cx, cy: y(s), r: 5, style: "fill:var(--fg)" }, g);
+        box(cx, y(r), "RY");
+      }
+      if (opts.times) el("text", { x: cx, y: top - 8, "text-anchor": "middle", "font-size": 10, style: "fill:var(--muted)" }, g, opts.times[k]);
+    });
+  }
+
+  // ---------- hero graph ----------
+  (function () {
+    const g = document.getElementById("heroEdges").parentNode;
+    const pos = [[40, 100], [120, 40], [120, 100], [120, 160], [210, 60], [210, 150], [285, 105]];
+    const edges = [[0, 1], [0, 2], [0, 3], [1, 4], [2, 4], [3, 5], [4, 6], [5, 6], [6, 0]];
+    const gg = el("g", {}, g);
+    drawGraph(gg, pos, edges, { r: 13, curve: { 8: -70 } });
+  })();
+
+  // ---------- motif gallery ----------
+  const MOTIFS = [
+    ["FAN-OUT", "One account pays many.", [[20, 40], [80, 14], [80, 40], [80, 66]], [[0, 1], [0, 2], [0, 3]], true],
+    ["FAN-IN", "Many accounts pay one.", [[20, 14], [20, 40], [20, 66], [80, 40]], [[0, 3], [1, 3], [2, 3]], true],
+    ["CYCLE", "Money goes round and comes back.", [[50, 12], [84, 64], [16, 64]], [[0, 1], [1, 2], [2, 0]]],
+    ["SCATTER-GATHER", "Split up, then collected again.", [[10, 40], [50, 12], [50, 40], [50, 68], [90, 40]], [[0, 1], [0, 2], [0, 3], [1, 4], [2, 4], [3, 4]]],
+    ["GATHER-SCATTER", "Collected, then split up.", [[10, 14], [10, 40], [10, 66], [50, 40], [90, 14], [90, 40], [90, 66]], [[0, 3], [1, 3], [2, 3], [3, 4], [3, 5], [3, 6]]],
+    ["BIPARTITE", "One group pays another group.", [[20, 14], [20, 40], [20, 66], [80, 24], [80, 56]], [[0, 3], [0, 4], [1, 3], [1, 4], [2, 3], [2, 4]]],
+    ["STACK", "Two bipartite layers in a row.", [[10, 24], [10, 56], [50, 24], [50, 56], [90, 24], [90, 56]], [[0, 2], [0, 3], [1, 2], [1, 3], [2, 4], [2, 5], [3, 4], [3, 5]]],
+    ["RANDOM", "A random walk of payments.", [[12, 60], [36, 18], [62, 56], [88, 20]], [[0, 1], [1, 2], [2, 3]]],
+  ];
+  const mwrap = document.getElementById("motifs");
+  MOTIFS.forEach(([name, desc, pos, edges, pair]) => {
+    const d = document.createElement("div");
+    d.className = "motif" + (pair ? " pair" : "");
+    const svg = el("svg", { viewBox: "0 0 100 80", "aria-label": name + " pattern" }, d);
+    drawGraph(el("g", {}, svg), pos, edges, { r: 6, labels: false, sw: 1.6 });
+    const b = document.createElement("b"); b.textContent = name; d.appendChild(b);
+    const s = document.createElement("small"); s.textContent = desc; d.appendChild(s);
+    mwrap.appendChild(d);
+  });
+
+  // ---------- mapping section ----------
+  drawGraph(document.getElementById("mapGraph"), [[40, 70], [160, 22], [160, 70], [160, 118]], [[0, 1], [0, 2], [0, 3]], { r: 13 });
+  drawCircuit(document.getElementById("mapCirc"), 4, [[0, 1], [0, 2], [0, 3]], "rzz", { col: 50, gapY: 34 });
+
+  // ---------- lab ----------
+  const PAIRS = {
+    fan: {
+      n: 4,
+      A: { title: "Fan-out", sub: "A pays B, C, D", pos: [[45, 90], [175, 30], [175, 90], [175, 150]], edges: [[0, 1], [0, 2], [0, 3]] },
+      B: { title: "Fan-in", sub: "B, C, D pay A", pos: [[45, 90], [175, 30], [175, 90], [175, 150]], edges: [[1, 0], [2, 0], [3, 0]] },
+    },
+    tri: {
+      n: 3,
+      A: { title: "Cycle", sub: "A → B → C → A, money returns", pos: [[110, 28], [185, 155], [35, 155]], edges: [[0, 1], [1, 2], [2, 0]], times: ["t1", "t2", "t3"] },
+      B: { title: "No-return triangle", sub: "A → B → C, and A → C", pos: [[110, 28], [185, 155], [35, 155]], edges: [[0, 1], [1, 2], [0, 2]], times: ["t1", "t2", "t3"] },
+    },
+  };
+  const GATE_TEXT = {
+    rzz: "<b>RZZ</b>: the same dot on both wires. Swapping payer and payee gives the same gate. On Garnet: 2 CZ.",
+    zx: "<b>ZX</b>: the payer gets a Z, the payee gets an X. The two ends are different, so the arrow survives. On Garnet: 2 CZ, same as RZZ.",
+    cry: "<b>CRY</b>: the payer is the control (dot), the payee gets rotated. Easy to explain: money flows from control to target. On Garnet: 2 CZ.",
+  };
+  const state = { pair: "fan", gate: "rzz", theta: 0.7, ordGate: "zx" };
+
+  function renderSide(host, n, spec, gate, theta) {
+    host.innerHTML = "";
+    const h = document.createElement("h3");
+    h.innerHTML = `${spec.title} <small>${spec.sub}</small>`;
+    host.appendChild(h);
+    const gs = el("svg", { viewBox: "0 0 220 180", "aria-label": spec.title + " graph" }, host);
+    gs.style.maxWidth = "260px";
+    drawGraph(el("g", {}, gs), spec.pos, spec.edges, { r: 14, times: spec.times });
+    const wrap = document.createElement("div"); wrap.className = "scroll"; host.appendChild(wrap);
+    const cs = el("svg", { "aria-label": spec.title + " circuit" }, wrap);
+    drawCircuit(el("g", {}, cs), n, spec.edges, gate, { times: spec.times });
+    const probs = runCircuit(n, spec.edges, gate, theta);
+    const bars = document.createElement("div"); bars.className = "bars";
+    const cap = document.createElement("div"); cap.className = "eyebrow"; cap.textContent = "Output: chance each qubit reads 1"; bars.appendChild(cap);
+    probs.forEach((p, q) => {
+      const r = document.createElement("div"); r.className = "bar";
+      r.innerHTML = `<span>${NAMES[q]}</span><span class="track"><span class="fill" style="width:${(p * 100).toFixed(1)}%;display:block"></span></span><span>${p.toFixed(3)}</span>`;
+      bars.appendChild(r);
+    });
+    host.appendChild(bars);
+    return probs;
+  }
+
+  function verdict(host, d, sameMsg, diffMsg, theta) {
+    const same = d < 1e-9;
+    host.className = "verdict " + (same ? "same" : "diff");
+    const extra = same && theta < 1e-9 ? " (At θ = 0 every gate does nothing, so all circuits agree.)" : "";
+    host.innerHTML = `<span class="pill">${same ? "identical" : "different · gap " + d.toFixed(3)}</span><div><strong>${same ? sameMsg[0] : diffMsg[0]}</strong><p>${same ? sameMsg[1] + extra : diffMsg[1]}</p></div>`;
+  }
+
+  function renderLab() {
+    const P = PAIRS[state.pair];
+    document.getElementById("gateCard").innerHTML = GATE_TEXT[state.gate];
+    const a = renderSide(document.getElementById("sideA"), P.n, P.A, state.gate, state.theta);
+    const b = renderSide(document.getElementById("sideB"), P.n, P.B, state.gate, state.theta);
+    verdict(document.getElementById("verdict"), gap(a, b),
+      ["The circuit cannot tell them apart.", "Both shapes produce exactly the same output, so no amount of training can separate them. We compare the outputs as a set, so account names do not matter."],
+      ["The circuit can tell them apart.", "The outputs differ, so a classifier on top of this circuit has something to learn from. We compare the outputs as a set, so account names do not matter."],
+      state.theta);
+  }
+
+  function renderOrder() {
+    const g = state.ordGate;
+    const base = { pos: [[30, 90], [110, 90], [190, 90]] };
+    const specA = Object.assign({}, base, { title: "A → B runs first", sub: "then B → C", edges: [[0, 1], [1, 2]], times: ["1st", "2nd"] });
+    const specB = Object.assign({}, base, { title: "B → C runs first", sub: "then A → B", edges: [[1, 2], [0, 1]], times: ["1st", "2nd"] });
+    const ha = document.getElementById("ordA"), hb = document.getElementById("ordB");
+    const a = renderSide(ha, 3, specA, g, 0.7);
+    const b = renderSide(hb, 3, specB, g, 0.7);
+    let d = 0; for (let i = 0; i < 3; i++) d = Math.max(d, Math.abs(a[i] - b[i]));
+    verdict(document.getElementById("ordVerdict"), d,
+      ["Order does not matter for RZZ.", "Symmetric gates commute, so any order gives the same output. That is why Skolik's design never needed an ordering rule."],
+      ["Order matters for directed gates.", "Same accounts, same payments, different output. So the circuit needs a fixed order. Timestamp order works, because it comes from the data, not from how we named the accounts."],
+      1);
+  }
+
+  function bindSeg(id, key, fn) {
+    const seg = document.getElementById(id);
+    seg.addEventListener("click", e => {
+      const btn = e.target.closest("button"); if (!btn) return;
+      state[key] = btn.dataset.v;
+      seg.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+      fn();
+    });
+  }
+  bindSeg("pairSeg", "pair", renderLab);
+  bindSeg("gateSeg", "gate", renderLab);
+  bindSeg("ordGateSeg", "ordGate", renderOrder);
+  const th = document.getElementById("theta");
+  th.addEventListener("input", () => { state.theta = +th.value; document.getElementById("thetaVal").textContent = state.theta.toFixed(2); renderLab(); });
+  renderLab();
+  renderOrder();
+
+  // ---------- multigraph cards ----------
+  (function () {
+    const m = document.getElementById("mergeSvg");
+    drawGraph(m, [[30, 45], [110, 45]], [[0, 1], [0, 1], [0, 1]], { r: 12, curve: { 0: -16, 1: 0, 2: 16 } });
+    el("text", { x: 140, y: 30, "font-size": 11, style: "fill:var(--muted)" }, m, "$200 + $900 + $400");
+    el("text", { x: 140, y: 50, "font-size": 11 }, m, "→ 1 gate, θ = w·log(1500)");
+    el("text", { x: 140, y: 70, "font-size": 11, style: "fill:var(--muted)" }, m, "count = 3 (feature)");
+    const s = document.getElementById("splitSvg");
+    drawGraph(s, [[30, 45], [110, 45]], [[0, 1], [0, 1], [0, 1]], { r: 12, curve: { 0: -16, 1: 0, 2: 16 } });
+    el("text", { x: 140, y: 30, "font-size": 11 }, s, "gate 1: w·log(200)");
+    el("text", { x: 140, y: 50, "font-size": 11 }, s, "gate 2: w·log(900)");
+    el("text", { x: 140, y: 70, "font-size": 11 }, s, "gate 3: w·log(400)");
+  })();
+})();
+</script>
+</body>
+</html>
