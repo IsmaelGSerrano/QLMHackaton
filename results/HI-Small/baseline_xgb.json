@@ -1,0 +1,195 @@
+{
+  "dataset": "HI-Small",
+  "data": {
+    "transactions": 5078345,
+    "laundering": 5177,
+    "illicit_ratio": 0.0010194266045335635,
+    "accounts": 515088,
+    "days": 18,
+    "start": "2022-09-01 00:00:00",
+    "end": "2022-09-18 16:18:00"
+  },
+  "features": [
+    "amount_paid_log",
+    "amount_received_log",
+    "same_currency",
+    "same_bank",
+    "hour",
+    "weekday",
+    "payment_format_code",
+    "payment_currency_code",
+    "receiving_currency_code",
+    "out_n_1d",
+    "out_sum_1d",
+    "out_mean_1d",
+    "out_std_1d",
+    "in_n_1d",
+    "in_sum_1d",
+    "in_mean_1d",
+    "in_std_1d",
+    "out_uniq_1d",
+    "in_uniq_1d",
+    "out_spread_1d",
+    "in_spread_1d",
+    "out_n_7d",
+    "out_sum_7d",
+    "out_mean_7d",
+    "out_std_7d",
+    "in_n_7d",
+    "in_sum_7d",
+    "in_mean_7d",
+    "in_std_7d",
+    "out_uniq_7d",
+    "in_uniq_7d",
+    "out_spread_7d",
+    "in_spread_7d",
+    "recip_2cycle",
+    "cycle3"
+  ],
+  "split_days": {
+    "train": 6,
+    "val": 2,
+    "test": 10
+  },
+  "val": {
+    "n": 965524,
+    "positives": 1036,
+    "pr_auc": 0.3987920957571008,
+    "roc_auc": 0.9804812957915952,
+    "f1_at_threshold": 0.43591258121677495,
+    "threshold": 0.6611368656158447,
+    "f1_best_on_this_set": 0.436835891381346,
+    "recall_at_fpr_0.1pct": 0.4391891891891892,
+    "recall_at_fpr_1pct": 0.7007722007722008
+  },
+  "test": {
+    "n": 863900,
+    "positives": 1611,
+    "pr_auc": 0.5386023246100208,
+    "roc_auc": 0.9807581783216713,
+    "f1_at_threshold": 0.5247986434930055,
+    "threshold": 0.6611368656158447,
+    "f1_best_on_this_set": 0.557169459962756,
+    "recall_at_fpr_0.1pct": 0.5431409062693979,
+    "recall_at_fpr_1pct": 0.7343265052762259
+  },
+  "feature_importance": [
+    [
+      "payment_format_code",
+      0.3754197955131531
+    ],
+    [
+      "same_currency",
+      0.11680673807859421
+    ],
+    [
+      "out_uniq_7d",
+      0.04611239209771156
+    ],
+    [
+      "same_bank",
+      0.044739022850990295
+    ],
+    [
+      "out_spread_1d",
+      0.03721058368682861
+    ],
+    [
+      "out_uniq_1d",
+      0.036299724131822586
+    ],
+    [
+      "out_n_1d",
+      0.026915065944194794
+    ],
+    [
+      "amount_received_log",
+      0.02625354751944542
+    ],
+    [
+      "in_spread_1d",
+      0.02457593008875847
+    ],
+    [
+      "weekday",
+      0.02411011978983879
+    ],
+    [
+      "cycle3",
+      0.023118536919355392
+    ],
+    [
+      "in_uniq_7d",
+      0.021537596359848976
+    ],
+    [
+      "in_uniq_1d",
+      0.018744228407740593
+    ],
+    [
+      "out_spread_7d",
+      0.012901240959763527
+    ],
+    [
+      "in_spread_7d",
+      0.011722487397491932
+    ],
+    [
+      "recip_2cycle",
+      0.011339932680130005
+    ],
+    [
+      "amount_paid_log",
+      0.011180829256772995
+    ],
+    [
+      "out_std_7d",
+      0.01080993190407753
+    ],
+    [
+      "payment_currency_code",
+      0.00961639266461134
+    ],
+    [
+      "receiving_currency_code",
+      0.008816832676529884
+    ],
+    [
+      "out_std_1d",
+      0.008612360805273056
+    ],
+    [
+      "out_n_7d",
+      0.0082843117415905
+    ],
+    [
+      "in_n_1d",
+      0.007741507608443499
+    ],
+    [
+      "out_sum_7d",
+      0.007605445571243763
+    ],
+    [
+      "in_mean_7d",
+      0.007363585289567709
+    ]
+  ],
+  "model": "xgboost",
+  "params": {
+    "objective": "binary:logistic",
+    "colsample_bytree": 0.8,
+    "early_stopping_rounds": 100,
+    "enable_categorical": true,
+    "eval_metric": "aucpr",
+    "learning_rate": 0.05,
+    "max_depth": 6,
+    "min_child_weight": 5,
+    "missing": NaN,
+    "n_estimators": 2000,
+    "random_state": 0,
+    "scale_pos_weight": 100.0,
+    "subsample": 0.8,
+    "tree_method": "hist"
+  }
+}

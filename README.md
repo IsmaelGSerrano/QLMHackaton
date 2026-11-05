@@ -120,6 +120,25 @@ amounts, 2- and 3-cycles), trains XGBoost with early stopping on validation, pic
 validation, and reports PR-AUC, minority-class F1 and recall at 0.1% / 1% FPR on test.
 Results go to `results/<dataset>/baseline_xgb.json`.
 
+### Baseline results so far
+
+HI-Small, temporal split 64/19/17 by days (train 3.25M / val 966K / test 864K transactions),
+35 features, XGBoost 2000 rounds (hit the cap; 35 min on CPU). Threshold chosen on validation.
+
+| Metric (test) | Value |
+|---|---|
+| Minority-class F1 at val threshold | **0.525** |
+| PR-AUC | 0.539 |
+| ROC-AUC | 0.981 |
+| Recall at 0.1% FPR | 0.543 |
+| Recall at 1% FPR | 0.734 |
+
+For reference, published minority-F1 on HI-Small: ~0.3 for a vanilla GIN, ~0.5–0.65 for Multi-GNN
+with ports/ego-IDs/reverse MP ([2] in the literature list), ~0.6+ for Graph Feature Preprocessor + boosting ([3]).
+Top features: payment format, same-currency flag, 7-day fan-out (unique receivers), same-bank flag,
+1-day fan-out spread, 3-cycle membership. Note the illicit rate drifts upward over time
+(train 0.08%, val 0.11%, test 0.19%), so test numbers are not directly comparable to validation.
+
 ## Literature
 
 See [`literature/README.md`](literature/README.md) for an annotated reading list:
