@@ -440,12 +440,19 @@
       <li><b>Start state matters.</b> A payee in |+⟩ is unchanged by X, so RY must come first or ZX does nothing</li>
     </ul>
     <div>
-      <img class="fig" src="../../results/figures/qgnn_learning_curve.png" alt="Learning curve: test PR-AUC vs training fraction for zx-p1, zx-p2, rzz-p1 and xgb-subgraph" style="max-height:300px">
+      <img class="fig" src="../../results/figures/qgnn_learning_curve.png" alt="Learning curve: test PR-AUC vs training fraction for zx-p1, zx-p2, rzz-p1 and xgb-subgraph" style="max-height:250px">
       <table style="font-size:.48em">
         <thead><tr><th>ZX − RZZ, test PR-AUC, n ≤ 8</th><th class="num">~20 pos.</th><th class="num">~50</th><th class="num">~100</th><th class="num">199</th></tr></thead>
         <tbody><tr><td>paired bootstrap [95 % CI]</td><td class="num">+0.08 [+.02, +.14]</td><td class="num">+0.12 [+.04, +.18]</td><td class="num">+0.11 [+.05, +.17]</td><td class="num">+0.00 [−.07, +.07]</td></tr></tbody>
       </table>
       <p class="src">Direction helps when labels are scarce; with all of them RZZ catches up via amounts and counts. 5 seeds, random = 0.17. <a href="../../results/figures/qgnn_learning_curve.md">qgnn_learning_curve.md</a></p>
+      <ul style="font-size:.4em;margin:.3em 0 0 1.2em;padding:0;line-height:1.3;list-style:none">
+        <li><b>zx-p1:</b> directed ZX gate on each transaction (sees payer → payee), 1 layer, 7 weights. Our main model; the one run on Garnet.</li>
+        <li><b>zx-p2:</b> the same ZX circuit with 2 layers (deeper, more weights). Not better than zx-p1 with all labels (0.676 vs 0.695).</li>
+        <li><b>rzz-p1:</b> symmetric RZZ gate (A→B = B→A), 1 layer. The direction ablation: same 2-CZ cost on Garnet, blind to direction. Reference for every Δ.</li>
+        <li><b>xgb-subgraph:</b> classical baseline, XGBoost on 21 directed subgraph features.</li>
+        <li><b>No hardware data here:</b> every point is exact state-vector simulation (no shots, no noise), trained on a laptop. Garnet ran inference only, of zx-p1 (slide 15).</li>
+      </ul>
     </div>
   </div>
   <aside class="notes">(25 s) First lesson: turning a graph into qubits is a rule, and the choice of two-qubit gate decides what the model can ever see. The symmetric gate loses direction exactly; the directed gate costs the same. But directed gates do not commute, so time order became part of the model. And merging repeats keeps circuits shallow. The payoff in training: with 20 to 100 positives, ZX beats RZZ by about 0.1 PR-AUC and the interval excludes zero. With all 199, the gap closes.</aside>
