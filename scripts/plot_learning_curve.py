@@ -38,7 +38,8 @@ def latest_multiseed(name: str, model: str, k: int) -> dict | None:
     files = sorted((RESULTS / name).glob(f"{prefix}-n{k}_*.json"))
     for f in reversed(files):
         run = json.loads(f.read_text(encoding="utf-8"))
-        if len(run.get("seeds", [])) > 1:
+        # Skip feature ablations (e.g. WP4 --exclude time_span_h): the figure shows the full model.
+        if len(run.get("seeds", [])) > 1 and not run.get("config", {}).get("exclude"):
             return run | {"_file": f.relative_to(RESULTS).as_posix()}
     return None
 
