@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Add `scripts/train_qgnn.py`: train `qgnn-zx-p1`, `qgnn-zx-p2` and `qgnn-rzz-p1` on the n8 and n12 subgraph caches, one `record_run` per model and size (issue #7)
+- Train with weighted binary cross-entropy (positive weight = negatives / positives), Adam on mini-batches, early stopping on validation PR-AUC
+- Record a learning curve on 10 / 25 / 50 / 100 % of the training split, with test recall per motif type
+- Add `qlmaml.qgnn`: `train`, `predict`, `graph_from_cache_row` and `nested_subsamples` (stratified, nested, seeded subsets that WP4 reuses)
+- Add `qlmaml.circuit.statevector_mean_z`: exact numpy statevector with an adjoint gradient, about 10x faster than PennyLane for training, checked against PennyLane value and gradient
+- Add `qlmaml.circuit.graph_from_merged` for edges that are already merged (the parquet cache)
+
 ## [0.0.1] — 2026-11-06
 
 ### Added

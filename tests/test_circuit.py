@@ -111,3 +111,27 @@ def test_parameter_count_is_the_same_for_every_graph_size():
     # Plan section 3: a, b, w, v, c per layer plus alpha, beta0.
     assert n_params(1) == 7
     assert n_params(2) == 12
+
+
+@pytest.mark.parametrize("edge_gate", ["zx", "rzz"])
+@pytest.mark.parametrize("p", [1, 2])
+def test_fast_statevector_matches_pennylane_value_and_gradient(edge_gate, p):
+    # The training backend: plain numpy with an adjoint gradient. It must give the same
+    # s = mean_i <Z_i> and the same d s / d params as PennyLane backprop.
+    import pennylane as qml
+    from pennylane import numpy as pnp
+
+    from qlmaml.circuit import statevector_mean_z
+
+    graph = merge_transactions(4, MULE)
+    gates = build_gates(graph, p=p, edge_gate=edge_gate)
+    (params,) = draws(p, seed=11 + p)
+    s, grad = statevector_mean_z(gates, graph.n, params, grad=True)
+
+    expected_s = float(np.mean(pennylane_expvals(gates, graph.n, params)))
+    expected_grad = qml.grad(lambda q: qml.math.mean(pennylane_expvals(gates, graph.n, q)))(
+        pnp.array(params, requires_grad=True)
+    )
+    assert s == pytest.approx(expected_s, abs=1e-10)
+    np.testing.assert_allclose(grad, expected_grad, atol=1e-10)
+    assert statevector_mean_z(gates, graph.n, params) == pytest.approx(expected_s, abs=1e-10)
