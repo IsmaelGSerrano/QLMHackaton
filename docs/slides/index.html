@@ -374,6 +374,72 @@
 
 <!-- ======================================================================= -->
 <section>
+  <p class="kicker">Appendix · how the score is computed</p>
+  <h2>From a subgraph to a score, with the trained parameters</h2>
+  <svg viewBox="0 0 1000 300" role="img" aria-label="Trained zx-p1 circuit on a toy 3-account cycle A to B to C to A: RY node gates, three ZX edge gates in time order, RX mixer, Z readouts averaged to s = 0.859" style="width:94%">
+    <g stroke="#5f6b7a" stroke-width="1.5"><line x1="70" y1="50" x2="880" y2="50"/><line x1="70" y1="125" x2="880" y2="125"/><line x1="70" y1="200" x2="880" y2="200"/></g>
+    <g style="font-size:18px" text-anchor="end" fill="#1f2933"><text x="58" y="56">A |0⟩</text><text x="58" y="131">B |0⟩</text><text x="58" y="206">C |0⟩</text></g>
+    <g fill="#e1f5ee" stroke="#1d9e75" stroke-width="1.5"><rect x="90" y="30" width="110" height="40" rx="4"/><rect x="90" y="105" width="110" height="40" rx="4"/><rect x="90" y="180" width="110" height="40" rx="4"/></g>
+    <g style="font-size:15px" text-anchor="middle" fill="#1f2933"><text x="145" y="56">RY(2.83)</text><text x="145" y="131">RY(2.84)</text><text x="145" y="206">RY(2.83)</text></g>
+    <g stroke="#d85a30" stroke-width="2"><line x1="290" y1="50" x2="290" y2="125"/><line x1="430" y1="125" x2="430" y2="200"/><line x1="570" y1="50" x2="570" y2="200"/></g>
+    <g fill="#fbece6" stroke="#d85a30" stroke-width="2">
+      <rect x="272" y="32" width="36" height="36" rx="4"/><rect x="272" y="107" width="36" height="36" rx="4"/>
+      <rect x="412" y="107" width="36" height="36" rx="4"/><rect x="412" y="182" width="36" height="36" rx="4"/>
+      <rect x="552" y="182" width="36" height="36" rx="4"/><rect x="552" y="32" width="36" height="36" rx="4"/></g>
+    <g style="font-size:18px" font-weight="600" text-anchor="middle" fill="#d85a30"><text x="290" y="57">Z</text><text x="290" y="132">X</text><text x="430" y="132">Z</text><text x="430" y="207">X</text><text x="570" y="207">Z</text><text x="570" y="57">X</text></g>
+    <g style="font-size:14px" text-anchor="middle" fill="#5f6b7a">
+      <text x="145" y="245">a·f + b</text>
+      <text x="290" y="245">t1: A pays B $9.0k</text><text x="290" y="265">θ = −9.14</text>
+      <text x="430" y="245">t2: B pays C $8.8k</text><text x="430" y="265">θ = −9.12</text>
+      <text x="570" y="245">t3: C pays A $8.6k</text><text x="570" y="265">θ = −9.09</text>
+      <text x="680" y="245">c = 3.50</text></g>
+    <g fill="#e1f5ee" stroke="#1d9e75" stroke-width="1.5"><rect x="644" y="30" width="72" height="40" rx="4"/><rect x="644" y="105" width="72" height="40" rx="4"/><rect x="644" y="180" width="72" height="40" rx="4"/></g>
+    <g style="font-size:15px" text-anchor="middle" fill="#1f2933"><text x="680" y="56">RX(c)</text><text x="680" y="131">RX(c)</text><text x="680" y="206">RX(c)</text></g>
+    <g fill="#fff" stroke="#1f2933" stroke-width="1.5"><rect x="760" y="30" width="96" height="40" rx="4"/><rect x="760" y="105" width="96" height="40" rx="4"/><rect x="760" y="180" width="96" height="40" rx="4"/></g>
+    <g style="font-size:15px" text-anchor="middle" fill="#1f2933"><text x="808" y="56">⟨Z⟩ = .871</text><text x="808" y="131">⟨Z⟩ = .874</text><text x="808" y="206">⟨Z⟩ = .831</text></g>
+    <text x="900" y="122" style="font-size:16px" fill="#1f2933">mean</text><text x="900" y="144" style="font-size:16px" font-weight="600" fill="#1f2933">s = 0.859</text>
+  </svg>
+  <div class="callout ok" style="font-size:.72em;font-family:'JetBrains Mono',monospace">score = σ(α·s + β₀) = σ(2.85 · 0.859 − 0.62) = σ(1.82) = <b>0.86</b></div>
+  <p class="src">Toy graph, not from the dataset: a cycle, one transfer per pair. Trained zx-p1 parameters (n ≤ 8): a = 0.45, b = −1.59, w = −1.00, v = −0.62, c = 3.50, α = 2.85, β₀ = −0.62
+    (<a href="../../results/HI-Small/qgnn-zx-p1-n8_20261106-003450.json">run file</a>). Node angle a·f + b with f = log(1 + flow); edge angle θ = w·log(1 + USD) + v·log(count); here count = 1, so v adds nothing.
+    Code: <a href="../../src/qlmaml/circuit.py">circuit.py</a>.</p>
+  <aside class="notes">Backup for "what does the circuit actually compute?". The data sets the gate angles: each account's flow sets its RY angle, each payment's amount and count set its ZX angle. The 7 trained numbers are the weights inside those angles, shared by every account and every payment. We measure Z on every qubit, average the values into one number s, and a logistic turns s into a probability. On Garnet each ZX gate compiles to 2 CZ plus single-qubit PRX gates; the readout is the same, estimated from 2,000 shots.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">Appendix · comparison</p>
+  <h2>Same training as logistic regression; only f(x) changes</h2>
+  <div class="cols" style="font-size:.6em;gap:.8em">
+    <div class="callout" style="border-color:#888780;background:#f1efe8">
+      <b>Logistic regression</b><br>
+      <span style="font-family:'JetBrains Mono',monospace">z = w·x + b<br>ŷ = σ(z)</span>
+    </div>
+    <div class="callout ok">
+      <b>Our circuit (zx-p1)</b><br>
+      <span style="font-family:'JetBrains Mono',monospace">s = (1/n) Σᵢ ⟨ψ(x;θ)| Zᵢ |ψ(x;θ)⟩<br>ŷ = σ(α·s + β₀)</span>
+    </div>
+  </div>
+  <table style="font-size:.5em;margin-top:.5em">
+    <thead><tr><th></th><th>Logistic regression</th><th>Our circuit</th></tr></thead>
+    <tbody>
+      <tr><td>Input x</td><td>a feature vector</td><td>a subgraph: flows, amounts, counts, direction, time order</td></tr>
+      <tr><td>Learned</td><td>w, b: one weight per feature</td><td>7 shared numbers: a, b, w, v, c, α, β₀</td></tr>
+      <tr><td>How x enters</td><td>multiplied by a weight</td><td>as gate angles: a·f + b, w·log(1 + USD) + v·log(count)</td></tr>
+      <tr><td>Core operation</td><td>one weighted sum (vector × vector)</td><td>product of 2ⁿ × 2ⁿ unitary matrices on a 2ⁿ state (256 numbers at n = 8)</td></tr>
+      <tr><td>Matrix entries</td><td>free weights</td><td>cos / sin of an angle; only the angle is trained</td></tr>
+      <tr><td>Nonlinearity</td><td>sigmoid</td><td>cos / sin of the angles, |ψ|² at readout, then sigmoid</td></tr>
+      <tr><td>Structure</td><td>any feature can combine with any other</td><td>gates only between accounts that paid each other, in payment direction</td></tr>
+      <tr><td>Loss, optimiser, metrics</td><td>cross-entropy, gradient descent</td><td>same: weighted cross-entropy, Adam, PR-AUC</td></tr>
+    </tbody>
+  </table>
+  <div class="callout ok" style="font-size:.62em;margin-top:.5em">The quantum part is the structure of f, not speed: at n ≤ 8 a laptop multiplies these matrices in microseconds.
+    The structure gives direction [2] and relabelling invariance with 7 parameters [9].</div>
+  <aside class="notes">Backup for "how is this different from a classical classifier?". Training is the classical recipe: a predicted probability, cross-entropy against the label, gradient steps. The only difference is the function from input to the number inside the sigmoid. In logistic regression it is a weighted sum. Here it is a product of rotation matrices whose shape copies the graph: one qubit per account, one directed gate per payment. That restriction is the inductive bias. We make no speed claim.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
   <p class="kicker">References</p>
   <ol style="font-size:.5em;text-align:left">
     <li>Altman et al., <i>Realistic Synthetic Financial Transactions for Anti-Money Laundering Models</i>, NeurIPS 2023 Datasets and Benchmarks.</li>
