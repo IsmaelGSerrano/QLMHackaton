@@ -20,6 +20,12 @@
 - Add `scripts/garnet_fit.py`: the "motif fit on Garnet" table for every test circuit of the n8 and n12 caches, written to `results/hardware/garnet_fit_<name>_n<k>_<UTC>Z.json`
 - Add `scripts/eval_noisy.py`: run the trained WP3 model exact, on noiseless Aer and on IQMFakeGarnet with 2,000 shots, one `record_run` per mode (`qgnn-<model>-n<k>-<mode>`), and the equivariance spread over 20 test graphs x 3 relabelled copies on different physical qubits
 - Add WP5 HI-Small runs: Garnet fit for n8 and n12, noisy evaluation of `qgnn-zx-p1-n8` (seed 0)
+- Add `scripts/run_garnet.py` (issue #10): run the trained `qgnn-zx-p1-n8` on IQM Garnet through `select_backend` (`--target fake|mock|qpu`, `--yes` required for `qpu`), next to exact, noiseless-shot and IQMFakeGarnet runs of the same circuits; 60 test graphs (class ratio kept, 0-SWAP graphs first) plus WP5's 20 x 3 equivariance copies, 2,000 shots, raw counts and job ids stored
+- Add readout-error mitigation as separate rows: `qlmaml.garnet.readout_calibration_circuits`, `readout_errors`, `mitigated_mean_z` (independent per-qubit errors, calibration circuits in every job), `measured_qubits` (final qubit per clbit after routing)
+- Match qubits to the live chip by name (`qubit_index_map`, `remap_qubits`): live Garnet leaves out qubits that are out of calibration and renumbers the rest; `unsupported_ops` treats CZ as symmetric (live targets list each coupler in one direction)
+- Split hardware batches into jobs of at most 100 circuits (the Resonance limit); a declined job now raises instead of failing on an empty result
+- Add `qlmaml.garnet.pick_hardware_graphs` and `newest_equivariance_copies`; move `pick_equivariance_graphs` from `scripts/eval_noisy.py` to `qlmaml.garnet`
+- Add the first real-hardware run: `results/HI-Small/garnet_20261106-030338.json` (Garnet, 19 qubits, 2 jobs, 122 circuits x 2,000 shots)
 
 ## [0.0.1] — 2026-11-06
 
