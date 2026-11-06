@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AML Subgraph Inference</title>
+<style>
+:root { --bg:#f7f7f5; --panel:#fff; --ink:#1d1d1b; --muted:#6b6b66; --line:#e2e1dc; --accent:#3b5bdb;
+  --bad:#c92a2a; --ok:#2b8a3e; --q:#7048e8; --c:#1c7ed6; --bar:#dfe3f5; }
+@media (prefers-color-scheme: dark) { :root { --bg:#151515; --panel:#1f1f1f; --ink:#ececec; --muted:#9a9a95;
+  --line:#333; --accent:#748ffc; --bad:#ff6b6b; --ok:#69db7c; --q:#9775fa; --c:#4dabf7; --bar:#2a2f45; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui, sans-serif; }
+header { padding:16px 20px; border-bottom:1px solid var(--line); }
+header h1 { margin:0; font-size:18px; }
+header p { margin:4px 0 0; color:var(--muted); }
+main { display:grid; grid-template-columns:280px 1fr; gap:16px; padding:16px 20px; }
+@media (max-width:860px) { main { grid-template-columns:1fr; } }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+.list { max-height:75vh; overflow:auto; padding:0; }
+.item { padding:8px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
+.item:hover, .item.sel { background:var(--bar); }
+.tag { display:inline-block; font-size:11px; padding:1px 6px; border-radius:10px; border:1px solid var(--line); margin-left:4px; }
+.tag.l { color:var(--bad); border-color:var(--bad); }
+.muted { color:var(--muted); font-size:12px; }
+.row { display:flex; gap:16px; flex-wrap:wrap; }
+.row > * { flex:1 1 320px; min-width:0; }
+svg { width:100%; height:auto; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th, td { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+td.num { text-align:right; font-variant-numeric:tabular-nums; }
+.btns { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:8px 0; }
+button { font:inherit; padding:6px 12px; border-radius:6px; border:1px solid var(--line); background:var(--panel); color:var(--ink); cursor:pointer; }
+button.c { border-color:var(--c); color:var(--c); } button.q { border-color:var(--q); color:var(--q); }
+button:disabled { opacity:.4; cursor:default; }
+.bar { height:10px; background:var(--accent); border-radius:2px; min-width:1px; }
+.flag { font-weight:600; } .flag.y { color:var(--bad); } .flag.n { color:var(--ok); }
+details pre { white-space:pre-wrap; font-size:12px; max-height:240px; overflow:auto; }
+h2 { font-size:15px; margin:0 0 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AML subgraph inference: XGBoost vs quantum circuit</h1>
+  <p id="sub">Test-split subgraphs from IBM AML HI-Small. Pick one, run each engine, compare score and response time.</p>
+</header>
+<main>
+  <div class="panel list" id="list"></div>
+  <div>
+    <div class="panel" id="detail"><span class="muted">Select a subgraph.</span></div>
+    <div class="panel" style="margin-top:16px">
+      <h2>Run</h2>
+      <div class="btns">
+        <button class="c" data-e="xgboost">XGBoost (CPU)</button>
+        <button class="q" data-e="exact">Circuit: exact (CPU)</button>
+        <button class="q" data-e="fake">Circuit: Fake Garnet (CPU)</button>
+        <button class="q" data-e="mock" id="b-mock">Circuit: garnet:mock (cloud)</button>
+        <button class="q" data-e="qpu" id="b-qpu">Circuit: IQM Garnet QPU</button>
+        <label class="muted">shots <input id="shots" type="number" value="1000" min="100" max="4000" step="100" style="width:70px"></label>
+      </div>
+      <div class="muted" id="status"></div>
+      <table id="runs"><thead><tr><th>#</th><th>subgraph</th><th>engine</th><th>where</th><th class="num">score</th><th>flag</th><th class="num">total ms</th><th style="width:22%">time</th><th>steps (ms)</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+let current = null, runs = 0, maxMs = 1;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function init() {
+  const s = await (await fetch('/api/summary')).json();
+  const m = s.models;
+  $('#sub').textContent = `Test-split subgraphs from IBM AML HI-Small (temporal split). XGBoost: ${m.xgboost.features} graph features, test PR-AUC ${m.xgboost.test_pr_auc.toFixed(3)}. Circuit ${m.circuit.model}: ${m.circuit.params} parameters, test PR-AUC ${m.circuit.test_pr_auc.toFixed(3)} (exact).`;
+  if (!s.token) { $('#b-mock').disabled = true; $('#b-mock').title = 'IQM_TOKEN not set'; }
+  if (!s.token || !s.allow_qpu) { $('#b-qpu').disabled = true; $('#b-qpu').title = 'needs IQM_TOKEN and ALLOW_QPU=1'; }
+  $('#list').innerHTML = s.examples.map(e => `<div class="item" data-id="${e.id}">
+    <b>${e.id}</b> ${e.label ? `<span class="tag l">${esc(e.pattern)}</span>` : '<span class="tag">normal</span>'}
+    <div class="muted">${e.n_qubits} accounts · ${e.n_edges} edges · ${e.swaps ? e.swaps + ' SWAPs' : 'fits Garnet'} · ${e.start_ts.slice(0,16).replace('T',' ')}</div></div>`).join('');
+  document.querySelectorAll('.item').forEach(el => el.onclick = () => select(el.dataset.id));
+  document.querySelectorAll('button[data-e]').forEach(b => b.onclick = () => run(b.dataset.e));
+  select(s.examples[0].id);
+}
+
+async function select(id) {
+  document.querySelectorAll('.item').forEach(el => el.classList.toggle('sel', el.dataset.id === id));
+  current = await (await fetch('/api/examples/' + id)).json();
+  current.id = id;
+  const n = current.n_qubits, R = 120, cx = 170, cy = 150;
+  const pos = current.nodes.map((_, i) => [cx + R * Math.cos(2*Math.PI*i/n - Math.PI/2), cy + R * Math.sin(2*Math.PI*i/n - Math.PI/2)]);
+  const edges = current.edges.filter(e => e.u !== e.v).map(e => {
+    const [x1,y1] = pos[e.u], [x2,y2] = pos[e.v], dx = x2-x1, dy = y2-y1, L = Math.hypot(dx,dy) || 1;
+    const back = current.edges.some(f => f.u === e.v && f.v === e.u), off = back ? 8 : 0;
+    const ox = -dy/L*off, oy = dx/L*off;
+    return `<line x1="${x1+dx/L*16+ox}" y1="${y1+dy/L*16+oy}" x2="${x2-dx/L*18+ox}" y2="${y2-dy/L*18+oy}" stroke="var(--muted)" stroke-width="${1+Math.log10(1+e.n_tx)*2}" marker-end="url(#arr)"><title>${esc(current.nodes[e.u])} → ${esc(current.nodes[e.v])}: $${e.total_usd.toFixed(2)} in ${e.n_tx} tx</title></line>`;
+  }).join('');
+  const nodes = pos.map(([x,y], i) => `<circle cx="${x}" cy="${y}" r="14" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/><text x="${x}" y="${y+4}" text-anchor="middle" font-size="11" fill="var(--ink)">${i}</text>`).join('');
+  const svg = `<svg viewBox="0 0 340 300" role="img" aria-label="Directed transaction subgraph"><defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--muted)"/></marker></defs>${edges}${nodes}</svg>`;
+  const accts = current.nodes.map((a, i) => { const [bank, acc] = a.split(':'); return `<tr><td>${i}</td><td>${esc(bank)}</td><td>${esc(acc)}</td></tr>`; }).join('');
+  const tx = current.edges.map(e => `<tr><td>${e.u} → ${e.v}</td><td class="num">$${e.total_usd.toLocaleString(undefined,{maximumFractionDigits:2})}</td><td class="num">${e.n_tx}</td><td>${e.first_ts.slice(0,16).replace('T',' ')}</td></tr>`).join('');
+  $('#detail').innerHTML = `<h2>${id}: ${current.label ? 'laundering · ' + esc(current.pattern) : 'normal activity'} <span class="muted">(${current.kind}, ground truth hidden from the models)</span></h2>
+    <div class="row"><div>${svg}<div class="muted">One qubit per account; one ZX gate per payer→payee edge, in time order. Arrow width ~ number of transfers.</div></div>
+    <div><table><thead><tr><th>qubit</th><th>bank</th><th>account</th></tr></thead><tbody>${accts}</tbody></table>
+    <table style="margin-top:8px"><thead><tr><th>edge</th><th class="num">total USD</th><th class="num">tx</th><th>first</th></tr></thead><tbody>${tx}</tbody></table></div></div>`;
+}
+
+async function run(engine) {
+  if (!current) return;
+  const btns = document.querySelectorAll('button[data-e]'); btns.forEach(b => b.dataset.was = b.disabled);
+  btns.forEach(b => b.disabled = true);
+  $('#status').textContent = `Running ${engine} on ${current.id}…` + (engine === 'qpu' || engine === 'mock' ? ' (cloud job: includes network and queue)' : '');
+  try {
+    const r = await fetch('/api/infer', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({example: current.id, engine, shots: +$('#shots').value})});
+    const o = await r.json();
+    if (!r.ok) throw new Error(o.error);
+    addRow(o); $('#status').textContent = '';
+  } catch (e) { $('#status').textContent = 'Error: ' + e.message; }
+  btns.forEach(b => b.disabled = b.dataset.was === 'true');
+}
+
+function addRow(o) {
+  runs++; maxMs = Math.max(maxMs, o.total_ms);
+  const steps = Object.entries(o.timings_ms).map(([k,v]) => `${k} ${v.toFixed(v < 10 ? 2 : 0)}`).join(', ');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${runs}</td><td>${o.example}<div class="muted">${o.label ? esc(o.pattern) : 'normal'}</div></td><td>${o.engine}</td><td class="muted">${esc(o.where)}</td>
+    <td class="num">${o.score.toFixed(3)}<div class="muted">thr ${o.threshold.toFixed(3)}</div></td>
+    <td class="flag ${o.flagged ? 'y' : 'n'}">${o.flagged ? 'suspicious' : 'clear'}</td>
+    <td class="num">${o.total_ms.toFixed(1)}</td><td><div class="bar" data-ms="${o.total_ms}"></div></td>
+    <td class="muted">${steps}<details><summary>details</summary><pre>${esc(JSON.stringify(o.details, null, 1))}</pre></details></td>`;
+  $('#runs tbody').prepend(tr);
+  // log scale: CPU runs take ms, hardware runs take seconds
+  document.querySelectorAll('.bar').forEach(b => b.style.width = (100 * Math.log10(1 + +b.dataset.ms) / Math.log10(1 + maxMs)) + '%');
+}
+init();
+</script>
+</body>
+</html>

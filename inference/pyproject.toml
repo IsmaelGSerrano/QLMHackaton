@@ -1,0 +1,18 @@
+[project]
+name = "qlmaml-inference"
+version = "0.0.1"
+description = "Small inference image: XGBoost vs the trained circuit on IQM Garnet (hackathon demo)"
+requires-python = ">=3.12,<3.13"
+# Only what app.py needs; versions match the main project's uv.lock so the XGBoost model and the
+# transpiled circuits behave the same as in results/.
+dependencies = [
+    "numpy==2.5.4",
+    "xgboost-cpu==3.4.1",     # same model format, without the CUDA/NCCL libraries (~350 MB)
+    "qiskit==2.1.2",
+    "qiskit-aer==0.17.2",     # IQMFakeGarnet simulation
+    "iqm-client[qiskit]==36.0.0",
+    "requests==2.34.2",       # qlmaml.qpu_pick (Resonance machine status)
+]
+
+[tool.uv]
+package = false

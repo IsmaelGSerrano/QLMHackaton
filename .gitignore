@@ -225,3 +225,6 @@ literature/pdfs/
 
 # Smoke-test outputs on synthetic data
 results/FAKE-*/
+
+# Inference image bundle (dataset subgraphs + models; rebuild with inference/export_bundle.py)
+inference/bundle/
