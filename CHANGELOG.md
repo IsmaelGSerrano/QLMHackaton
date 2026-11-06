@@ -26,6 +26,9 @@
 - Split hardware batches into jobs of at most 100 circuits (the Resonance limit); a declined job now raises instead of failing on an empty result
 - Add `qlmaml.garnet.pick_hardware_graphs` and `newest_equivariance_copies`; move `pick_equivariance_graphs` from `scripts/eval_noisy.py` to `qlmaml.garnet`
 - Add the first real-hardware run: `results/HI-Small/garnet_20261106-030338.json` (Garnet, 19 qubits, 2 jobs, 122 circuits x 2,000 shots)
+- Complete the 5-minute deck `docs/slides/index.html` (issue #11): dataset, challenge (direction carries the label), circuit and its mechanisms, RZZ vs ZX ablation, learning curve, Garnet fit and hardware run, an honest summary, real-world use; detailed data slides moved to backup, with a leakage backup slide and timed speaker notes
+- Add `tests/test_slides.py`: every local file the deck links must exist, and the evidence figures must be on a slide
+- Add UNODC as [13] in `literature/README.md` (source of the 2–5 % of global GDP estimate)
 
 ## [0.0.1] — 2026-11-06
 
