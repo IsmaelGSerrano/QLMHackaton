@@ -96,3 +96,49 @@ def paired_bootstrap_diff(y_true, scores_a, scores_b, metric=average_precision_s
     return {"diff": _seed_mean(metric, y_true, scores_a) - _seed_mean(metric, y_true, scores_b),
             "lo": float(lo), "hi": float(hi), "p_a_not_better": float((diffs <= 0).mean()),
             "level": level, "n_boot": n_boot}
+
+
+# --- Learning curves over several training seeds (WP3, WP4) ------------------------------------
+#
+# A curve is {seed: [row per fraction]}; each row holds "fraction", "n_train", the "val" and "test"
+# dicts of `evaluate`, and the raw "test_scores" (so curves of different models can be paired).
+
+
+def _mean_metrics(rows: list[dict]) -> dict:
+    """Mean over seeds of every metric (the threshold is chosen per seed, so this is its mean)."""
+    return {k: float(np.mean([r[k] for r in rows])) for k in rows[0]}
+
+
+def seed_curve_summary(curves: dict[int, list[dict]], y_test, n_boot: int = 1000) -> list[dict]:
+    """Per fraction: mean and std over seeds of the test PR-AUC, and the bootstrap CI of the seed mean."""
+    y_test = np.asarray(y_test)
+    seeds = sorted(curves)
+    out = []
+    for i in range(len(curves[seeds[0]])):
+        rows = [curves[s][i] for s in seeds]
+        pr = np.array([r["test"]["pr_auc"] for r in rows])
+        out.append({
+            "fraction": rows[0]["fraction"],
+            "n_train": rows[0]["n_train"],
+            "n_seeds": len(rows),
+            "test_pr_auc_mean": float(pr.mean()),
+            "test_pr_auc_std": float(pr.std(ddof=1)) if len(rows) > 1 else 0.0,
+            "test_pr_auc_ci": bootstrap_ci(y_test, np.array([r["test_scores"] for r in rows]), n_boot=n_boot, seed=0),
+            "val": _mean_metrics([r["val"] for r in rows]),
+            "test": _mean_metrics([r["test"] for r in rows]),
+        })
+    return out
+
+
+def paired_curves(curves_a: dict, curves_b: dict, y_test, n_boot: int = 1000) -> list[dict]:
+    """Per fraction: paired bootstrap of test PR-AUC (a - b), over the seeds both curves have.
+
+    Both must score the same test subgraphs in the same order (the same cache)."""
+    seeds = sorted(set(curves_a) & set(curves_b), key=int)
+    out = []
+    for i in range(len(curves_a[seeds[0]])):
+        a = np.array([curves_a[s][i]["test_scores"] for s in seeds])
+        b = np.array([curves_b[s][i]["test_scores"] for s in seeds])
+        out.append({"fraction": curves_a[seeds[0]][i]["fraction"], "seeds": seeds,
+                    **paired_bootstrap_diff(y_test, a, b, n_boot=n_boot, seed=0)})
+    return out

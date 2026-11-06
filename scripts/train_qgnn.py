@@ -45,7 +45,7 @@ import numpy as np  # noqa: E402
 import polars as pl  # noqa: E402
 
 from qlmaml.circuit import param_names  # noqa: E402
-from qlmaml.metrics import bootstrap_ci, evaluate, paired_bootstrap_diff, recall_by_pattern  # noqa: E402
+from qlmaml.metrics import evaluate, paired_curves, recall_by_pattern, seed_curve_summary  # noqa: E402
 from qlmaml.qgnn import LEARNING_CURVE, TrainConfig, graph_from_cache_row, nested_subsamples, predict, train  # noqa: E402
 from qlmaml.subgraphs import build_fake_cache  # noqa: E402
 from qlmaml.tracking import record_run  # noqa: E402
@@ -111,42 +111,6 @@ def run_seed(cache: Path, key: str, seed: int, fractions: list[float], hp: dict)
     return curve
 
 
-def _mean_metrics(rows: list[dict]) -> dict:
-    """Mean over seeds of every metric (the threshold is chosen per seed, so this is its mean)."""
-    return {k: float(np.mean([r[k] for r in rows])) for k in rows[0]}
-
-
-def aggregate(curves: dict[int, list[dict]], y_test: np.ndarray, fractions: list[float]) -> list[dict]:
-    """Per fraction: mean/std over seeds and the bootstrap CI of the seed-mean test PR-AUC."""
-    out = []
-    for i, f in enumerate(fractions):
-        rows = [curves[s][i] for s in sorted(curves)]
-        pr = np.array([r["test"]["pr_auc"] for r in rows])
-        scores = np.array([r["test_scores"] for r in rows])
-        out.append({
-            "fraction": f,
-            "n_train": rows[0]["n_train"],
-            "n_seeds": len(rows),
-            "test_pr_auc_mean": float(pr.mean()),
-            "test_pr_auc_std": float(pr.std(ddof=1)) if len(rows) > 1 else 0.0,
-            "test_pr_auc_ci": bootstrap_ci(y_test, scores, n_boot=N_BOOT, seed=0),
-            "val": _mean_metrics([r["val"] for r in rows]),
-            "test": _mean_metrics([r["test"] for r in rows]),
-        })
-    return out
-
-
-def paired_vs_reference(curves: dict, ref: dict, y_test: np.ndarray, fractions: list[float]) -> list[dict]:
-    """Paired bootstrap of (model - reference) test PR-AUC per fraction, over the seeds both have."""
-    seeds = sorted(set(curves) & set(ref))
-    out = []
-    for i, f in enumerate(fractions):
-        a = np.array([curves[s][i]["test_scores"] for s in seeds])
-        b = np.array([ref[s][i]["test_scores"] for s in seeds])
-        out.append({"fraction": f, "seeds": seeds, **paired_bootstrap_diff(y_test, a, b, n_boot=N_BOOT, seed=0)})
-    return out
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--name", default="HI-Small", help="dataset name in the cache file name")
@@ -195,7 +159,7 @@ def main() -> None:
         for key in args.models:
             gate, p = MODELS[key]
             cfg = TrainConfig(edge_gate=gate, p=p, seed=seeds[0], **hp)
-            agg = aggregate(curves[key], y_test, fractions)
+            agg = seed_curve_summary(curves[key], y_test, n_boot=N_BOOT)
             full = agg[-1]  # the largest fraction: 1.0 unless --fractions leaves it out
             result = {
                 "headline_fraction": full["fraction"],
@@ -217,8 +181,8 @@ def main() -> None:
             }
             if key != REFERENCE and REFERENCE in curves:
                 result["paired"] = {"reference": REFERENCE,
-                                    "test_pr_auc_diff": paired_vs_reference(curves[key], curves[REFERENCE],
-                                                                            y_test, fractions)}
+                                    "test_pr_auc_diff": paired_curves(curves[key], curves[REFERENCE], y_test,
+                                                                      n_boot=N_BOOT)}
             for row in agg:
                 ci = row["test_pr_auc_ci"]
                 print(f"  {cfg.model}-n{k} f={row['fraction']:.2f}: test PR-AUC {row['test_pr_auc_mean']:.3f} "

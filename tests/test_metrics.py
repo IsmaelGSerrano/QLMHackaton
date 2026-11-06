@@ -58,3 +58,37 @@ def test_paired_difference_detects_a_clearly_better_model():
     assert d["lo"] > 0 and d["p_a_not_better"] == 0.0
     flipped = paired_bootstrap_diff(Y, weak, good, n_boot=300)
     assert flipped["diff"] == pytest.approx(-d["diff"]) and flipped["hi"] < 0
+
+
+def _curve_row(fraction, pr_auc, test_scores):
+    """One fraction of one seed's learning curve, as the training scripts (WP3, WP4) write it."""
+    m = {"pr_auc": pr_auc, "f1_at_threshold": 0.5}
+    return {"fraction": fraction, "n_train": 10, "val": m, "test": m, "test_scores": test_scores}
+
+
+def test_seed_curve_summary_gives_mean_std_and_ci_per_fraction():
+    from qlmaml.metrics import seed_curve_summary
+
+    y = np.array([1, 0, 0, 0])
+    curves = {0: [_curve_row(1.0, 0.6, [0.9, 0.1, 0.2, 0.3])],
+              1: [_curve_row(1.0, 0.8, [0.8, 0.1, 0.2, 0.3])]}
+
+    (row,) = seed_curve_summary(curves, y, n_boot=20)
+
+    assert row["fraction"] == 1.0 and row["n_seeds"] == 2 and row["n_train"] == 10
+    assert row["test_pr_auc_mean"] == pytest.approx(0.7)
+    assert row["test_pr_auc_std"] == pytest.approx(0.141421, abs=1e-6)  # sample std of 0.6, 0.8
+    assert row["test_pr_auc_ci"]["estimate"] == pytest.approx(1.0)  # both seeds rank the positive first
+    assert row["test"]["pr_auc"] == pytest.approx(0.7)
+
+
+def test_paired_curves_of_a_model_with_itself_are_zero():
+    from qlmaml.metrics import paired_curves
+
+    y = Y
+    curves = {s: [_curve_row(1.0, 0.5, noisy_scores(y, 1.0, s).tolist())] for s in (0, 1)}
+
+    (row,) = paired_curves(curves, curves, y, n_boot=50)
+
+    assert row["fraction"] == 1.0 and row["seeds"] == [0, 1]
+    assert row["diff"] == 0.0 and row["lo"] == 0.0 and row["hi"] == 0.0
