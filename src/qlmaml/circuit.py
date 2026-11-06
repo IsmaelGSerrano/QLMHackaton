@@ -34,7 +34,7 @@ from typing import Literal
 
 import numpy as np
 
-EdgeGate = Literal["zx", "rzz"]
+EdgeGate = Literal["zx", "rzz", "cry"]
 LAYER_PARAMS = ("a", "b", "w", "v", "c")
 
 
@@ -136,8 +136,8 @@ class Gate:
 
 def build_gates(graph: CircuitGraph, p: int = 1, edge_gate: EdgeGate = "zx") -> list[Gate]:
     """The gate list for `graph` with `p` layers. Starts in |0>, so RY comes first (see plan pitfall)."""
-    if edge_gate not in ("zx", "rzz"):
-        raise ValueError(f"edge_gate must be 'zx' or 'rzz', not {edge_gate!r}")
+    if edge_gate not in ("zx", "rzz", "cry"):
+        raise ValueError(f"edge_gate must be 'zx', 'rzz' or 'cry', not {edge_gate!r}")
     gates: list[Gate] = []
     for layer in range(p):
         ia, ib, iw, iv, ic = (_index(layer, name) for name in LAYER_PARAMS)  # parameter indices
@@ -145,7 +145,13 @@ def build_gates(graph: CircuitGraph, p: int = 1, edge_gate: EdgeGate = "zx") -> 
             gates.append(Gate("ry", (i,), ((ia, f), (ib, 1.0))))
         for e in graph.edges:
             terms = ((iw, float(np.log1p(e.amount))), (iv, float(np.log(e.count))))
-            gates.append(Gate(edge_gate, (e.u, e.v), terms))
+            if edge_gate == "cry":
+                # CRY(2 theta), payer = control, payee = target, as two commuting Pauli rotations:
+                # CRY(2 theta) = RY_v(theta) exp(+i theta/2 Z_u Y_v), so every gate stays exp(-i h theta P).
+                gates.append(Gate("ry", (e.v,), terms))
+                gates.append(Gate("zy", (e.u, e.v), terms))
+            else:
+                gates.append(Gate(edge_gate, (e.u, e.v), terms))
         for i in range(graph.n):
             gates.append(Gate("rx", (i,), ((ic, 1.0),)))
     return gates
@@ -168,6 +174,12 @@ def qiskit_circuit(gates: Sequence[Gate], n: int, params):
             qc.rzx(2 * theta, *g.wires)
         elif g.kind == "rzz":
             qc.rzz(2 * theta, *g.wires)
+        elif g.kind == "zy":
+            # exp(+i theta/2 Z_u Y_v) = S_v RZX(-theta) S_v^dag, since S X S^dag = Y.
+            u, v = g.wires
+            qc.sdg(v)
+            qc.rzx(-theta, u, v)
+            qc.s(v)
         else:
             raise ValueError(f"unknown gate kind {g.kind!r}")
     return qc
@@ -195,6 +207,9 @@ def _apply_pennylane(gates: Sequence[Gate], params) -> None:
             qml.PauliRot(2 * theta, "ZX", wires=list(g.wires))
         elif g.kind == "rzz":
             qml.IsingZZ(2 * theta, wires=list(g.wires))
+        elif g.kind == "zy":
+            # PauliRot(phi, "ZY") = exp(-i phi/2 Z_u Y_v); we need exp(+i theta/2 Z_u Y_v).
+            qml.PauliRot(-theta, "ZY", wires=list(g.wires))
         else:
             raise ValueError(f"unknown gate kind {g.kind!r}")
 
@@ -214,7 +229,8 @@ def pennylane_expvals(gates: Sequence[Gate], n: int, params):
 
 # Every gate is U(theta) = exp(-i h theta P) with a Pauli string P: h = 1/2 for RY/RX
 # (exp(-i phi/2 Y)), h = 1 for ZX/RZZ (exp(-i theta Z X)). So U psi = cos(h theta) psi - i sin(h theta) P psi.
-_GENERATOR_SCALE = {"ry": 0.5, "rx": 0.5, "zx": 1.0, "rzz": 1.0}
+# "zy" (the two-qubit half of CRY) is exp(+i theta/2 Z_u Y_v), so h = -1/2.
+_GENERATOR_SCALE = {"ry": 0.5, "rx": 0.5, "zx": 1.0, "rzz": 1.0, "zy": -0.5}
 
 
 def _axis(n: int, w: int, index) -> tuple:
@@ -230,6 +246,10 @@ def _pauli(kind: str, wires: tuple[int, ...], psi: np.ndarray) -> np.ndarray:
         w = wires[0]
         return np.stack([-1j * psi[_axis(n, w, 1)], 1j * psi[_axis(n, w, 0)]], axis=w)
     u, v = wires
+    if kind == "zy":  # Y_v, then Z_u below
+        out = np.stack([-1j * psi[_axis(n, v, 1)], 1j * psi[_axis(n, v, 0)]], axis=v)
+        out[_axis(n, u, 1)] *= -1
+        return out
     # Copy: a reversed slice is a view, and the sign flips below are in place.
     out = (psi[_axis(n, v, slice(None, None, -1))] if kind == "zx" else psi).copy()  # X_v, or Z_v below
     if kind == "rzz":
