@@ -31,6 +31,14 @@
   .reveal .callout.ok { border-color: var(--pairs); background: var(--pairs-bg); }
   .reveal svg text { font-family: "Inter", system-ui, sans-serif; }
   .reveal .footer-note { position: absolute; bottom: -1.6em; left: 0; right: 0; font-size: .45em; color: var(--muted); }
+  .reveal img.fig { max-height: 470px; margin: 0; border: 0; box-shadow: none; }
+  .reveal .cols.wide-left { grid-template-columns: 1.15fr .85fr; }
+  .reveal .cols.wide-right { grid-template-columns: .8fr 1.2fr; }
+  .reveal .big { font-size: 1.5em; font-weight: 600; line-height: 1.1; }
+  .reveal .stat { text-align: left; margin: .3em 0; } .reveal .stat .lbl { font-size: .55em; color: var(--muted); }
+  .reveal td.num, .reveal th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .reveal tr.hl td { background: var(--pairs-bg); font-weight: 600; }
+  .reveal .tight li { margin: .12em 0; }
 </style>
 </head>
 <body>
@@ -40,9 +48,59 @@
 <section>
   <p class="kicker">ExtremeData4QML hackathon · IBM AML, HI-Small</p>
   <h1>Laundering as directed motifs</h1>
-  <p class="muted">A small quantum graph classifier on transaction subgraphs</p>
-  <p class="src">Deck in progress: dataset section drafted.</p>
-  <aside class="notes">Title. The talk follows the data: laundering is a directed subgraph motif, so we classify small directed subgraphs, one qubit per account.</aside>
+  <p class="muted">A direction-aware, permutation-equivariant quantum circuit on transaction subgraphs,<br>trained in simulation and run on IQM Garnet</p>
+  <aside class="notes">(10 s) Our argument starts from the data: laundering is a small directed pattern in a transaction graph. So the circuit is that pattern: one qubit per account, one directed gate per transfer.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">1 · Dataset</p>
+  <h2>A directed, temporal multigraph with 0.1 % laundering</h2>
+  <div class="cols wide-right">
+    <div>
+      <div class="stat"><div class="big">5.08 M</div><div class="lbl">transfers between 515 k accounts at 30.5 k banks, 18 days</div></div>
+      <div class="stat"><div class="big">87 %</div><div class="lbl">of transfers repeat an existing (payer, payee) pair: a multigraph</div></div>
+      <div class="stat"><div class="big laund">0.102 %</div><div class="lbl">laundering transfers, about 1 in 980</div></div>
+      <div class="stat"><div class="big">370</div><div class="lbl">labelled attempts in 8 motif types, each lasting 21–129 h on average</div></div>
+    </div>
+    <img class="fig" src="../../reports/HI-Small/figures/motif_examples.png" alt="One ground-truth laundering attempt per motif type">
+  </div>
+  <p class="src">IBM AML HI-Small, Altman et al. [1]. Numbers from Neo4j: <a href="../../reports/HI-Small/README.md">reports/HI-Small</a>.</p>
+  <aside class="notes">(35 s) IBM's synthetic AML data, HI-Small. Five million transfers, one in a thousand is laundering. The dataset also ships the ground truth as 370 attempts with a motif label. Each picture is one real attempt: fan-out, fan-in, cycle, and so on. Three properties matter: edges are directed, they have timestamps, and the same pair transacts many times.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">2 · Challenge</p>
+  <h2>The label is in the direction</h2>
+  <div class="cols">
+    <svg viewBox="0 0 530 300" role="img" aria-label="FAN-OUT and FAN-IN have the same undirected star; CYCLE and the no-return triangle have the same undirected triangle">
+      <defs><marker id="ah3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6"/></marker></defs>
+      <g style="font-size:15px" font-weight="600" text-anchor="middle" fill="#1f2933"><text x="70" y="20">FAN-OUT</text><text x="200" y="20">FAN-IN</text><text x="340" y="20">CYCLE</text><text x="470" y="20">no return</text></g>
+      <g stroke="#d85a30" stroke-width="2">
+        <line x1="70" y1="92" x2="70" y2="56" marker-end="url(#ah3)"/><line x1="79" y1="108" x2="117" y2="133" marker-end="url(#ah3)"/><line x1="61" y1="108" x2="23" y2="133" marker-end="url(#ah3)"/>
+        <line x1="200" y1="52" x2="200" y2="88" marker-end="url(#ah3)"/><line x1="249" y1="135" x2="212" y2="110" marker-end="url(#ah3)"/><line x1="151" y1="135" x2="188" y2="110" marker-end="url(#ah3)"/>
+        <line x1="335" y1="52" x2="302" y2="126" marker-end="url(#ah3)"/><line x1="306" y1="140" x2="370" y2="140" marker-end="url(#ah3)"/><line x1="380" y1="131" x2="347" y2="57" marker-end="url(#ah3)"/>
+        <line x1="465" y1="52" x2="432" y2="126" marker-end="url(#ah3)"/><line x1="436" y1="140" x2="500" y2="140" marker-end="url(#ah3)"/><line x1="475" y1="52" x2="508" y2="126" marker-end="url(#ah3)"/>
+      </g>
+      <g fill="#fbece6" stroke="#d85a30" stroke-width="2"><circle cx="70" cy="102" r="10"/><circle cx="70" cy="42" r="10"/><circle cx="128" cy="140" r="10"/><circle cx="12" cy="140" r="10"/>
+        <circle cx="200" cy="102" r="10"/><circle cx="200" cy="42" r="10"/><circle cx="258" cy="140" r="10"/><circle cx="142" cy="140" r="10"/>
+        <circle cx="340" cy="42" r="10"/><circle cx="296" cy="140" r="10"/><circle cx="384" cy="140" r="10"/>
+        <circle cx="470" cy="42" r="10"/><circle cx="426" cy="140" r="10"/><circle cx="514" cy="140" r="10"/></g>
+      <g style="font-size:14px" text-anchor="middle" fill="#5f6b7a"><text x="135" y="180">same undirected star</text><text x="405" y="180">same undirected triangle</text></g>
+      <g stroke="#888780" stroke-width="2"><line x1="135" y1="208" x2="135" y2="252"/><line x1="135" y1="252" x2="103" y2="282"/><line x1="135" y1="252" x2="167" y2="282"/>
+        <line x1="405" y1="208" x2="380" y2="277"/><line x1="380" y1="277" x2="430" y2="277"/><line x1="430" y1="277" x2="405" y2="208"/></g>
+      <g fill="#f1efe8" stroke="#888780" stroke-width="2"><circle cx="135" cy="252" r="8"/><circle cx="135" cy="208" r="8"/><circle cx="103" cy="282" r="8"/><circle cx="167" cy="282" r="8"/>
+        <circle cx="405" cy="208" r="8"/><circle cx="380" cy="277" r="8"/><circle cx="430" cy="277" r="8"/></g>
+    </svg>
+    <ul class="tight" style="font-size:.8em">
+      <li><b>Motifs:</b> laundering is a small subgraph pattern. Standard message passing misses these patterns; a model must use edge direction [2]</li>
+      <li><b>Imbalance:</b> 1 transfer in 980</li>
+      <li><b>Few labels:</b> 370 attempts; about 200 positives to train on after a temporal split</li>
+    </ul>
+  </div>
+  <div class="callout">So we want a model whose <b>inductive bias</b> is "directed subgraph, any account labelling", with very few parameters [9].</div>
+  <aside class="notes">(35 s) FAN-OUT and FAN-IN are the same star if you forget direction. A cycle, where the money comes back, and a triangle where it does not, are the same triangle. Egressy et al. prove that standard message-passing GNNs miss such patterns, and that direction-aware additions (reverse message passing, port numbers, ego IDs) let a GNN detect any directed pattern. On top, labels are rare: about 200 training positives. Skolik et al. argue that building the graph symmetry into the circuit cuts the parameter count, which is what we want with few labels.</aside>
 </section>
 
 <!-- ======================================================================= -->
@@ -51,12 +109,12 @@
   <h2>From 5 M transactions to small graphs</h2>
   <div class="cols">
     <div>
-      <ul>
+      <ul class="tight" style="font-size:.82em">
         <li>Task: <b>graph classification</b>. Input: a small directed subgraph. Output: "contains a laundering attempt?"</li>
         <li>One qubit per account: <b>≤ 8</b> for IQM Garnet, <b>≤ 12</b> in simulation</li>
-        <li>HI-Small lists <b>370 attempts</b> in 8 motif types</li>
-        <li>Fit without cutting: 196 at 8 accounts (53 %), 258 at 12 (70 %)</li>
+        <li>370 attempts fit without cutting: 196 at 8 accounts (53 %), 258 at 12 (70 %)</li>
         <li>Larger attempts are <b>cut in time</b>: keep accounts in the order the money reaches them</li>
+        <li><b>5 negatives</b> per positive: normal subgraphs matched on accounts and gates, so size cannot give the label away</li>
       </ul>
     </div>
     <svg viewBox="0 0 520 240" role="img" aria-label="An attempt cut in time at 4 accounts">
@@ -75,12 +133,162 @@
     </svg>
   </div>
   <p class="src">Dataset: Altman et al. [1]. Counts measured on <code>HI-Small_Patterns.txt</code>. Cutting is subsampling.</p>
-  <aside class="notes">A positive is the induced subgraph on an attempt's accounts over its time window, so normal background transfers between them are included. If the attempt has more accounts than qubits, we follow the money in time and stop at the cap: here E is dropped and the window ends at t3.</aside>
+  <aside class="notes">(35 s) A positive is the induced subgraph on an attempt's accounts over its time window, so normal background transfers between them are included. If the attempt has more accounts than qubits, we follow the money in time and stop at the cap: here E is dropped and the window ends at t3. Each positive gets 5 normal subgraphs with the same number of accounts and gates; otherwise any model could win by counting.</aside>
 </section>
 
 <!-- ======================================================================= -->
 <section>
-  <p class="kicker">Data</p>
+  <p class="kicker">3 · Quantum argument</p>
+  <h2>The circuit is the subgraph</h2>
+  <svg viewBox="0 0 1000 255" role="img" aria-label="Circuit on 3 accounts: RY node rotations, one ZX gate per transfer in timestamp order, RX mixer, mean of Z readouts" style="width:94%">
+    <g stroke="#5f6b7a" stroke-width="1.5"><line x1="70" y1="50" x2="900" y2="50"/><line x1="70" y1="125" x2="900" y2="125"/><line x1="70" y1="200" x2="900" y2="200"/></g>
+    <g style="font-size:18px" text-anchor="end" fill="#1f2933"><text x="58" y="56">A</text><text x="58" y="131">B</text><text x="58" y="206">C</text></g>
+    <g fill="#e1f5ee" stroke="#1d9e75" stroke-width="1.5"><rect x="90" y="30" width="120" height="40" rx="4"/><rect x="90" y="105" width="120" height="40" rx="4"/><rect x="90" y="180" width="120" height="40" rx="4"/></g>
+    <g style="font-size:15px" text-anchor="middle" fill="#1f2933"><text x="150" y="56">RY(a·f(A) + b)</text><text x="150" y="131">RY(a·f(B) + b)</text><text x="150" y="206">RY(a·f(C) + b)</text></g>
+    <g stroke="#d85a30" stroke-width="2"><line x1="300" y1="50" x2="300" y2="125"/><line x1="460" y1="125" x2="460" y2="200"/><line x1="620" y1="50" x2="620" y2="200"/></g>
+    <g fill="#fbece6" stroke="#d85a30" stroke-width="2">
+      <rect x="282" y="32" width="36" height="36" rx="4"/><rect x="282" y="107" width="36" height="36" rx="4"/>
+      <rect x="442" y="107" width="36" height="36" rx="4"/><rect x="442" y="182" width="36" height="36" rx="4"/>
+      <rect x="602" y="32" width="36" height="36" rx="4"/><rect x="602" y="182" width="36" height="36" rx="4"/></g>
+    <g style="font-size:18px" font-weight="600" text-anchor="middle" fill="#d85a30"><text x="300" y="57">Z</text><text x="300" y="132">X</text><text x="460" y="132">Z</text><text x="460" y="207">X</text><text x="620" y="57">Z</text><text x="620" y="207">X</text></g>
+    <g style="font-size:14px" text-anchor="middle" fill="#5f6b7a"><text x="300" y="245">t1: A pays B</text><text x="460" y="245">t2: B pays C</text><text x="620" y="245">t3: A pays C</text></g>
+    <text x="460" y="18" style="font-size:14px" text-anchor="middle" fill="#d85a30">exp(−iθ Z_payer X_payee),  θ = w·log(1 + USD) + v·log(count)</text>
+    <g fill="#e1f5ee" stroke="#1d9e75" stroke-width="1.5"><rect x="700" y="30" width="72" height="40" rx="4"/><rect x="700" y="105" width="72" height="40" rx="4"/><rect x="700" y="180" width="72" height="40" rx="4"/></g>
+    <g style="font-size:15px" text-anchor="middle" fill="#1f2933"><text x="736" y="56">RX(c)</text><text x="736" y="131">RX(c)</text><text x="736" y="206">RX(c)</text></g>
+    <g fill="#fff" stroke="#1f2933" stroke-width="1.5"><rect x="808" y="30" width="46" height="40" rx="4"/><rect x="808" y="105" width="46" height="40" rx="4"/><rect x="808" y="180" width="46" height="40" rx="4"/></g>
+    <g style="font-size:15px" text-anchor="middle" fill="#1f2933"><text x="831" y="56">⟨Z⟩</text><text x="831" y="131">⟨Z⟩</text><text x="831" y="206">⟨Z⟩</text></g>
+    <text x="915" y="131" style="font-size:16px" fill="#1f2933">mean</text>
+  </svg>
+  <table style="font-size:.58em;margin-top:.3em">
+    <thead><tr><th>Data property</th><th>Circuit choice</th><th>Mechanism</th></tr></thead>
+    <tbody>
+      <tr><td>Account labels are arbitrary</td><td>shared weights, mean ⟨Z⟩ readout</td><td><b>permutation equivariance</b> [9]: 7 parameters for any graph size</td></tr>
+      <tr><td>Direction carries the label</td><td>ZX gate: Z on payer, X on payee</td><td>swapping the ends changes the gate; RZZ [8, 9] does not</td></tr>
+      <tr><td>Money moves in time</td><td>gates in timestamp order</td><td>ZX gates on a mule (pays and receives) do not commute; time does not depend on labels</td></tr>
+      <tr><td>Multigraph, heavy-tailed amounts</td><td>one gate per account pair, angle from log USD and count</td><td>shallow: 2 CZ per pair on Garnet</td></tr>
+    </tbody>
+  </table>
+  <aside class="notes">(50 s) One qubit per account. Each account gets a rotation from its total flow. Each transfer, merged per account pair, is one ZX gate: Z on the payer, X on the payee, in the order the money moved. The weights are shared by all nodes and all edges, and the readout is an average, so renaming the accounts cannot change the output. This is Skolik's equivariance argument, extended to direction. The result is a model with 7 parameters whatever the graph size. The ZX gate is our novelty: Skolik and Verdon use ZZ, which is symmetric. ZX costs the same on Garnet: 2 CZ. The design decision is in ADR 0001.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">3 · Quantum argument · evidence</p>
+  <h2>A symmetric gate cannot see direction; ZX can</h2>
+  <div class="cols wide-left">
+    <img class="fig" src="../../results/figures/direction_ablation.png" alt="ZX separates FAN-IN from FAN-OUT and CYCLE from the no-return triangle; RZZ gives identical outputs" style="max-height:540px">
+    <div>
+      <ul class="tight" style="font-size:.78em">
+        <li>200 random parameter draws, noiseless</li>
+        <li><b>RZZ:</b> FAN-IN = FAN-OUT and CYCLE = no-return triangle, <b>exactly</b> (|Δs| = 0 for every draw)</li>
+        <li><b>ZX:</b> median |Δs| = 0.23 and 0.07</li>
+        <li>Same CZ cost on Garnet</li>
+      </ul>
+      <div class="callout ok" style="font-size:.68em">A property of the model class, not of training: no RZZ parameters can separate these pairs.</div>
+    </div>
+  </div>
+  <p class="src">Figure: <code>scripts/direction_ablation.py</code>. Unit tests check equivariance (|Δ| &lt; 1e-10 under relabelling) and PennyLane / Qiskit parity.</p>
+  <aside class="notes">(30 s) Before any training. Each dot is one random parameter setting. With RZZ every dot sits on the diagonal: the circuit returns the same number for fan-in and fan-out, and for a cycle and a no-return triangle. With ZX the dots leave the diagonal. So direction is in the model class.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">4 · Prototype · simulator</p>
+  <h2>Direction helps with limited labels; the gap closes with all of them</h2>
+  <img class="fig" src="../../results/figures/qgnn_learning_curve.png" alt="Learning curve: test PR-AUC vs training fraction for zx-p1, zx-p2, rzz-p1 and xgb-subgraph" style="max-height:350px">
+  <table style="font-size:.56em">
+    <thead><tr><th>n ≤ 8, test PR-AUC, 5 seeds<br>training graphs (positives)</th><th class="num">10 %<br>120 (~20)</th><th class="num">25 %<br>299 (~50)</th><th class="num">50 %<br>598 (~100)</th><th class="num">100 %<br>1,194 (199)</th></tr></thead>
+    <tbody>
+      <tr><td>ZX − RZZ, paired bootstrap [95 % CI]</td><td class="num">+0.08 [+0.02, +0.14]</td><td class="num">+0.12 [+0.04, +0.18]</td><td class="num">+0.11 [+0.05, +0.17]</td><td class="num">+0.00 [−0.07, +0.07]</td></tr>
+    </tbody>
+  </table>
+  <p class="src">Random = 0.17 (1 : 5). Same subgraphs, temporal split, 7 trainable parameters (p = 1). Full table: <a href="../../results/figures/qgnn_learning_curve.md">qgnn_learning_curve.md</a>; minority F1 and recall at fixed FPR: <a href="../../results/README.md">results/README.md</a>.</p>
+  <aside class="notes">(35 s) Same data, same 7 parameters, only the edge gate differs. With 10 to 50 percent of the training data, that is 20 to 100 positives, ZX beats RZZ by about 0.1 PR-AUC, and the confidence interval excludes zero. Across seeds ZX wins 3 or 4 times out of 5. With all the data the gap closes: RZZ catches up through amounts and counts. At 12 qubits the effect is weaker. The black line is XGBoost on 21 hand-made directed features of the same subgraphs: much better. We do not claim to beat it.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">4 · Prototype · IQM Garnet</p>
+  <h2>The same model on a 20-qubit chip</h2>
+  <div class="cols" style="align-items:start">
+    <div>
+      <p style="font-size:.58em;text-align:left;margin:0 0 .3em"><b>Fit on the lattice</b>: 420 test circuits, n ≤ 8</p>
+      <table style="font-size:.52em">
+        <thead><tr><th>motif</th><th class="num">0 SWAPs</th><th class="num">median CZ</th></tr></thead>
+        <tbody>
+          <tr><td>BIPARTITE · STACK · RANDOM</td><td class="num">100 %</td><td class="num">2–6</td></tr>
+          <tr><td>CYCLE</td><td class="num">83 %</td><td class="num">11.5</td></tr>
+          <tr><td>SCATTER-GATHER</td><td class="num">57 %</td><td class="num">16</td></tr>
+          <tr><td>FAN-IN · FAN-OUT</td><td class="num">25 %</td><td class="num">16–17</td></tr>
+          <tr><td>GATHER-SCATTER</td><td class="num">9 %</td><td class="num">17</td></tr>
+          <tr class="hl"><td>all, incl. negatives</td><td class="num">69 %</td><td class="num">8</td></tr>
+        </tbody>
+      </table>
+      <p class="src" style="text-align:left">Hubs with more than 4 neighbours need SWAPs on a square lattice.</p>
+    </div>
+    <div>
+      <p style="font-size:.58em;text-align:left;margin:0 0 .3em"><b>Inference</b>: 60 test graphs (10 positive), 2,000 shots</p>
+      <table style="font-size:.52em">
+        <thead><tr><th>mode</th><th class="num">PR-AUC [95 % CI]</th><th class="num">relabel spread</th></tr></thead>
+        <tbody>
+          <tr><td>exact statevector</td><td class="num">0.732 [0.48, 0.95]</td><td class="num">0</td></tr>
+          <tr><td>noiseless, shots</td><td class="num">0.733</td><td class="num">0.007</td></tr>
+          <tr><td>IQMFakeGarnet</td><td class="num">0.734</td><td class="num">0.007</td></tr>
+          <tr class="hl"><td>Garnet (real chip)</td><td class="num">0.713 [0.45, 0.92]</td><td class="num">0.024</td></tr>
+        </tbody>
+      </table>
+      <p class="src" style="text-align:left">Relabel spread: mean score range over 20 graphs × 3 relabellings placed on different physical qubits.
+        Trained in simulation; 122 circuits in 2 jobs, 92 s.</p>
+    </div>
+  </div>
+  <div class="callout ok" style="font-size:.66em">No detectable loss on hardware. Device noise breaks equivariance at 3.4× the shot-noise floor, and the noise model does not predict it (one run, one calibration day).</div>
+  <p class="src"><a href="../../results/hardware/wp6_garnet_summary.md">wp6_garnet_summary.md</a> · The run used 0-SWAP graphs, so compare its rows with each other, not with the full test split. With 10 positives, F1 and recall at fixed FPR are not informative; they are in the summary.</p>
+  <aside class="notes">(35 s) Two thirds of the circuits fit Garnet's square lattice with no SWAP. Pairs and chains always fit; fan hubs with more than 4 neighbours do not. We trained in simulation and ran only inference on the real chip: PR-AUC 0.71 against 0.73 exact. The intervals overlap, and there are only 10 positives, so this is "no detectable loss", not "equal". The interesting number is the right column. In theory the same graph on different qubits gives the same score. On Garnet the scores vary 3.4 times more than shot noise, and the fake-Garnet noise model misses that.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">4 · Prototype · what it shows</p>
+  <h2>Honest summary</h2>
+  <div class="cols" style="align-items:start">
+    <div class="callout ok" style="font-size:.7em">
+      <b>Shown</b>
+      <ul class="tight">
+        <li>Direction is inside the model class (exact ablation)</li>
+        <li>With few labels, ZX beats RZZ by about 0.1 PR-AUC (CI excludes 0)</li>
+        <li>7 parameters for any subgraph size (equivariance [9])</li>
+        <li>Runs on Garnet with no detectable loss; 69 % of circuits need 0 SWAPs</li>
+      </ul>
+    </div>
+    <div class="callout" style="font-size:.7em">
+      <b>Not shown</b>
+      <ul class="tight">
+        <li>Any advantage over classical: XGBoost on directed subgraph features reaches 0.96 PR-AUC, the circuit 0.70</li>
+        <li>That the circuit is hard to simulate: ≤ 12 qubits, statevector</li>
+        <li>That the quantum feature space differs from a classical one: next step, geometric difference [10]</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">(20 s) What we can defend: the inductive bias works as designed and survives real hardware. What we cannot: XGBoost with hand-made directed features is far better, and at 12 qubits nothing here is classically hard. The right next test is the geometric difference of Huang et al., which tells whether this quantum feature space can beat every classical kernel on this data.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">5 · Real world</p>
+  <h2>Any directed flow network has motifs</h2>
+  <ul style="text-align:left">
+    <li><b>Anti-money laundering:</b> an estimated 2–5 % of global GDP is laundered each year [13]</li>
+    <li><b>Fraud rings and mule networks:</b> money fans in and out through mule accounts</li>
+    <li><b>Crypto:</b> the same graph-ML task on real Bitcoin transactions [4]</li>
+    <li><b>Payments, supply chains:</b> cycles and scatter-gather in directed, time-stamped flows</li>
+  </ul>
+  <div class="callout ok">The recipe carries over: <b>qubit = node, ZX gate = directed edge, gate order = time, shared weights = symmetry.</b></div>
+  <aside class="notes">(15 s) The UN estimates that 2 to 5 percent of world GDP is laundered every year. The same structure, directed edges with time and repeated pairs, appears in fraud rings, mule networks, payments and supply chains. The circuit recipe needs no change. Thank you.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">Backup · data</p>
   <h2>Negatives must look like positives</h2>
   <ul style="text-align:left">
     <li>Every positive gets <b>5 negatives</b> (1 : 5): imbalanced, but trainable</li>
@@ -93,7 +301,7 @@
 
 <!-- ======================================================================= -->
 <section>
-  <p class="kicker">Data</p>
+  <p class="kicker">Backup · data</p>
   <h2>Ego-nets cannot look like separate pairs</h2>
   <svg viewBox="0 0 680 270" role="img" aria-label="BIPARTITE positive with 4 separate pairs, connected ego-net, and the pairs negative" style="width:88%">
     <defs><marker id="ah2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6"/></marker></defs>
@@ -117,7 +325,7 @@
 
 <!-- ======================================================================= -->
 <section>
-  <p class="kicker">Data</p>
+  <p class="kicker">Backup · data</p>
   <h2>The dataset we train on</h2>
   <table>
     <thead><tr><th></th><th>n = 8 (Garnet)</th><th>n = 12 (simulator)</th></tr></thead>
@@ -152,11 +360,31 @@
 
 <!-- ======================================================================= -->
 <section>
+  <p class="kicker">Backup · leakage</p>
+  <h2>The test period has a "laundering tail"</h2>
+  <ul style="text-align:left;font-size:.78em">
+    <li>Normal traffic stops after day 9. Days 10–17 hold 1,108 transfers, and 59 % of them are laundering</li>
+    <li>That is 41 % of all transfer-level test positives: time or activity features find them for free</li>
+    <li>The circuit uses timestamps only to <b>order</b> gates, never as an input value</li>
+    <li>WP4 check on XGBoost: without the window-length feature, test PR-AUC goes from 0.964 to 0.960 (n ≤ 8, 5 seeds)</li>
+  </ul>
+  <p class="src"><a href="../../reports/HI-Small/README.md">reports/HI-Small/README.md</a> · <a href="../../results/README.md">results/README.md</a></p>
+  <aside class="notes">Backup for questions on leakage and time shortcuts.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
   <p class="kicker">References</p>
-  <ol style="font-size:.6em;text-align:left">
+  <ol style="font-size:.5em;text-align:left">
     <li>Altman et al., <i>Realistic Synthetic Financial Transactions for Anti-Money Laundering Models</i>, NeurIPS 2023 Datasets and Benchmarks.</li>
     <li>Egressy et al., <i>Provably Powerful Graph Neural Networks for Directed Multigraphs</i>, AAAI 2024.</li>
+    <li value="4">Weber et al., <i>Anti-Money Laundering in Bitcoin: Experimenting with Graph Convolutional Networks for Financial Forensics</i>, KDD 2019 Workshop.</li>
+    <li value="8">Verdon et al., <i>Quantum Graph Neural Networks</i>, arXiv:1909.12264 (2019).</li>
+    <li>Skolik et al., <i>Equivariant Quantum Circuits for Learning on Weighted Graphs</i>, npj Quantum Information 9, 47 (2023).</li>
+    <li>Huang et al., <i>Power of Data in Quantum Machine Learning</i>, Nature Communications 12, 2631 (2021).</li>
+    <li value="13">UNODC, <i>Money laundering: overview</i>, <a href="https://www.unodc.org/unodc/en/money-laundering/overview.html">unodc.org</a>.</li>
   </ol>
+  <p class="src">Numbers follow <a href="../../literature/README.md">literature/README.md</a>. Design decision: <a href="../adr/0001-directed-edge-gates.md">ADR 0001</a>.</p>
 </section>
 
 </div></div>

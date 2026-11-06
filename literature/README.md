@@ -81,6 +81,12 @@ Nature 567, 209–212 (2019). [arXiv:1804.11326](https://arxiv.org/abs/1804.1132
 Physical Review Letters 122, 040504 (2019). [arXiv:1803.07128](https://arxiv.org/abs/1803.07128)
 - Frames quantum circuits as kernel methods. Background for kernel-alignment arguments.
 
+## E. Real-world context
+
+**[13] United Nations Office on Drugs and Crime (UNODC) — *Money laundering: overview*.**
+<https://www.unodc.org/unodc/en/money-laundering/overview.html>
+- Source of the estimate that 2–5 % of global GDP is laundered each year. Used on the "real world" slide.
+
 ---
 
 ## Possible angles for our argument (to discuss)
