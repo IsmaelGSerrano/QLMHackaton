@@ -10,9 +10,10 @@ weights shared by every node and edge, permutation-invariant readout:
     readout: s = mean_i <Z_i>  ->  logistic(alpha * s + beta0)
 
 The circuit is described once, as a list of `Gate`s. Each gate angle is a linear function of
-the trainable parameter vector, stored as (index, coefficient) pairs. Two backends read the list:
-`pennylane_expvals` (training, backprop, exact) and `qiskit_circuit` (Aer, IQMFakeGarnet, Garnet).
-A test checks that both give the same <Z_i>.
+the trainable parameter vector, stored as (index, coefficient) pairs. Three backends read the list:
+`statevector_mean_z` (training: plain numpy, exact, adjoint gradient), `pennylane_expvals` (the
+PennyLane reference, backprop) and `qiskit_circuit` (Aer, IQMFakeGarnet, Garnet). Tests check that
+all three give the same <Z_i>, and that the training gradient equals PennyLane's.
 
 Mechanisms (no "speedup" claim):
 - `edge_gate="zx"` is directed: Z on the payer, X on the payee. Swapping the ends changes the gate,
@@ -88,8 +89,23 @@ def merge_transactions(n: int, transactions: Iterable[tuple[int, int, float, flo
     - Self-transfers (u == v) add to the flow but get no gate (a two-qubit gate needs two qubits).
     """
     groups: dict[tuple[int, int], list[float]] = {}
-    flow = np.zeros(n)
     for u, v, amount, t in transactions:
+        g = groups.setdefault((u, v), [0.0, 0, np.inf])
+        g[0] += amount
+        g[1] += 1
+        g[2] = min(g[2], t)
+    return graph_from_merged(n, [(u, v, a, c, t) for (u, v), (a, c, t) in groups.items()])
+
+
+def graph_from_merged(n: int, merged: Iterable[tuple[int, int, float, int, float]]) -> CircuitGraph:
+    """`CircuitGraph` from edges that are already merged: (payer, payee, total_usd, count, first_ts).
+
+    Same ordering and node features as `merge_transactions` (which calls this). Use it for the
+    parquet cache of WP1, which stores merged edges with their transaction count.
+    """
+    flow = np.zeros(n)
+    edges = []
+    for u, v, amount, count, t in merged:
         if not (0 <= u < n and 0 <= v < n):
             raise ValueError(f"transaction {u} -> {v} is outside qubits 0..{n - 1}")
         if amount < 0:
@@ -97,11 +113,7 @@ def merge_transactions(n: int, transactions: Iterable[tuple[int, int, float, flo
         flow[u] += amount
         if u != v:
             flow[v] += amount
-            g = groups.setdefault((u, v), [0.0, 0, np.inf])
-            g[0] += amount
-            g[1] += 1
-            g[2] = min(g[2], t)
-    edges = [Edge(u, v, float(a), int(c), float(t)) for (u, v), (a, c, t) in groups.items()]
+            edges.append(Edge(u, v, float(amount), int(count), float(t)))
     edges.sort(key=lambda e: (e.t, e.amount, e.count, flow[e.u], flow[e.v]))
     return CircuitGraph(n, tuple(float(x) for x in np.log1p(flow)), tuple(edges))
 
@@ -198,6 +210,76 @@ def pennylane_expvals(gates: Sequence[Gate], n: int, params):
         return [qml.expval(qml.PauliZ(i)) for i in range(n)]
 
     return qml.math.stack(circuit(params))
+
+
+# Every gate is U(theta) = exp(-i h theta P) with a Pauli string P: h = 1/2 for RY/RX
+# (exp(-i phi/2 Y)), h = 1 for ZX/RZZ (exp(-i theta Z X)). So U psi = cos(h theta) psi - i sin(h theta) P psi.
+_GENERATOR_SCALE = {"ry": 0.5, "rx": 0.5, "zx": 1.0, "rzz": 1.0}
+
+
+def _axis(n: int, w: int, index) -> tuple:
+    return tuple(index if k == w else slice(None) for k in range(n))
+
+
+def _pauli(kind: str, wires: tuple[int, ...], psi: np.ndarray) -> np.ndarray:
+    """P psi for the generator P of a gate, on a state tensor of shape (2,) * n."""
+    n = psi.ndim
+    if kind == "rx":  # X_w
+        return psi[_axis(n, wires[0], slice(None, None, -1))]
+    if kind == "ry":  # Y_w: (Y psi)[0] = -i psi[1], (Y psi)[1] = i psi[0]
+        w = wires[0]
+        return np.stack([-1j * psi[_axis(n, w, 1)], 1j * psi[_axis(n, w, 0)]], axis=w)
+    u, v = wires
+    # Copy: a reversed slice is a view, and the sign flips below are in place.
+    out = (psi[_axis(n, v, slice(None, None, -1))] if kind == "zx" else psi).copy()  # X_v, or Z_v below
+    if kind == "rzz":
+        out[_axis(n, v, 1)] *= -1
+    elif kind != "zx":
+        raise ValueError(f"unknown gate kind {kind!r}")
+    out[_axis(n, u, 1)] *= -1  # Z_u
+    return out
+
+
+def _mean_z_diagonal(n: int) -> np.ndarray:
+    """The diagonal of (1/n) sum_i Z_i as a (2,) * n tensor: 1 - 2 * (number of ones) / n."""
+    ones = np.indices((2,) * n).sum(axis=0)
+    return 1.0 - 2.0 * ones / n
+
+
+def statevector_mean_z(gates: Sequence[Gate], n: int, params, grad: bool = False):
+    """Exact s = mean_i <Z_i> in plain numpy; with `grad=True` also d s / d params (adjoint method).
+
+    This is the training backend. It runs the same gate list as `pennylane_expvals` and a test checks
+    that value and gradient agree with PennyLane backprop. It exists for speed only: on 8 qubits and
+    about 20 gates, PennyLane's per-circuit overhead (17-35 ms per gradient) dominates the
+    simulation, and training does thousands of circuits per epoch.
+
+    Adjoint method: with psi_k the state after gate k and lambda_k = U_{k+1}^dag ... U_N^dag O psi_N,
+    dE/dtheta_k = 2 h Im <lambda_k | P_k psi_k>, and theta_k is linear in params.
+    """
+    params = np.asarray(params, dtype=float)
+    psi = np.zeros((2,) * n, dtype=complex)
+    psi[(0,) * n] = 1.0
+    angles = [float(g.angle(params)) for g in gates]
+    for g, theta in zip(gates, angles):
+        h = _GENERATOR_SCALE[g.kind]
+        psi = np.cos(h * theta) * psi - 1j * np.sin(h * theta) * _pauli(g.kind, g.wires, psi)
+    diag = _mean_z_diagonal(n)
+    s = float(np.sum(diag * np.abs(psi) ** 2))
+    if not grad:
+        return s
+    d_params = np.zeros_like(params)
+    lam = diag * psi
+    for g, theta in zip(reversed(gates), reversed(angles)):
+        h = _GENERATOR_SCALE[g.kind]
+        d_theta = 2 * h * float(np.vdot(lam, _pauli(g.kind, g.wires, psi)).imag)
+        for index, coef in g.terms:
+            d_params[index] += coef * d_theta
+        # Undo the gate on both: U^dag x = cos(h theta) x + i sin(h theta) P x.
+        c, sn = np.cos(h * theta), np.sin(h * theta)
+        psi = c * psi + 1j * sn * _pauli(g.kind, g.wires, psi)
+        lam = c * lam + 1j * sn * _pauli(g.kind, g.wires, lam)
+    return s, d_params
 
 
 def score(expvals, params):
