@@ -45,6 +45,8 @@ The team has access to real hardware through [IQM Resonance](https://resonance.i
 - **Credentials:** the Resonance API token goes in the `IQM_TOKEN` environment variable, kept in the git-ignored `.env` of the main checkout. Scripts call `qlmaml.env.load_dotenv()`, which reads the repo's `.env` (a worktree finds the main checkout's file; it never reads above the repo) and never overrides the shell. The vendored `python -m qlmaml.qpu_pick` reads only the shell, so export `IQM_TOKEN` there first. **Never commit the token** or write it into notebooks.
 - **Environment check (WP0):** `uv run python scripts/hardware_check.py` reads Garnet's status (read-only), then runs a Bell circuit on a noiseless simulator, on `fake` and on the free `garnet:mock`, and writes `results/hardware/wp0_bell_<UTC>Z.json`. The mock returns random bitstrings, so it proves only the submit path, not the physics. This is an environment check, not an experiment, so it does not use `record_run`.
 - Always report results from hardware next to results from noiseless and noisy simulation of the same circuit, with the shot count.
+- **Live-chip facts (learned 2026-11-06, WP6):** Resonance declines jobs with more than **100 circuits** (split batches; `scripts/run_garnet.py --max-circuits`). Live Garnet leaves out qubits that are out of calibration and **renumbers the rest** (on 2026-11-06 QB14 was out, so live index 13 = QB15): never send circuits transpiled for `IQMFakeGarnet` by index; map by qubit name (`qlmaml.garnet.qubit_index_map`, `remap_qubits`). Live targets list each CZ coupler in one direction only.
+- **WP6 hardware run:** `uv run python scripts/run_garnet.py --target qpu --yes --note "..."` (needs the n8 cache and a WP3 run; `--target mock` first is free).
 
 ## Writing
 

@@ -160,3 +160,159 @@ def test_equivariance_spread_is_zero_for_identical_copies_and_the_range_otherwis
     assert spread["max_range"] == pytest.approx(0.2)
     assert spread["mean_range"] == pytest.approx(0.1)
     assert spread["mean_std"] == pytest.approx((0.0 + 0.0816497) / 2, abs=1e-6)
+
+
+# --- WP6: hardware selection, readout mitigation, runnable check ----------------------------------
+
+
+def test_pick_hardware_graphs_keeps_the_class_ratio_and_prefers_zero_swaps():
+    import numpy as np
+
+    from qlmaml.garnet import pick_hardware_graphs
+
+    # 20 graphs, 1 in 4 positive; indices 1-5 need SWAPs, index 18 is too wide for the hardware track.
+    y = np.array([1 if i % 4 == 0 else 0 for i in range(20)])
+    swaps = [1 if 1 <= i <= 5 else 0 for i in range(20)]
+    n_qubits = [8] * 20
+    n_qubits[18] = 9
+    picked = pick_hardware_graphs(y, swaps, n_qubits, k=8, max_qubits=8, rng=np.random.default_rng(0))
+    assert picked == sorted(picked) and len(set(picked)) == 8
+    assert sum(y[i] for i in picked) == 2  # 8 * 5/20
+    assert 18 not in picked
+    assert all(swaps[i] == 0 for i in picked)  # enough SWAP-free graphs in each class
+
+
+def test_pick_hardware_graphs_falls_back_to_graphs_with_swaps_and_caps_at_what_exists():
+    import numpy as np
+
+    from qlmaml.garnet import pick_hardware_graphs
+
+    y = np.array([1, 1, 0, 0, 0, 0])
+    swaps = [3, 0, 2, 0, 0, 0]
+    picked = pick_hardware_graphs(y, swaps, [4] * 6, k=6, max_qubits=8, rng=np.random.default_rng(1))
+    assert picked == [0, 1, 2, 3, 4, 5]
+    picked = pick_hardware_graphs(y, swaps, [4] * 6, k=3, max_qubits=8, rng=np.random.default_rng(1))
+    assert 1 in picked and 0 not in picked and 2 not in picked  # 1 positive, 2 negatives, no SWAPs
+
+
+def test_readout_errors_come_from_the_all_zeros_and_all_ones_calibration_circuits():
+    from qiskit_aer import AerSimulator
+
+    from qlmaml.garnet import readout_calibration_circuits, readout_errors
+
+    zeros, ones = readout_calibration_circuits(3)
+    result = AerSimulator().run([zeros, ones], shots=100, seed_simulator=0).result()
+    e0, e1 = readout_errors(result.get_counts(0), result.get_counts(1), 3)
+    assert list(e0) == [0.0, 0.0, 0.0] and list(e1) == [0.0, 0.0, 0.0]  # noiseless readout
+
+    # Qiskit writes clbit 0 rightmost: physical qubit 2 reads 1 in 10 % of the all-zeros shots,
+    # physical qubit 0 reads 0 in 20 % of the all-ones shots.
+    e0, e1 = readout_errors({"000": 90, "100": 10}, {"111": 80, "110": 20}, 3)
+    assert list(e0) == pytest.approx([0.0, 0.0, 0.1]) and list(e1) == pytest.approx([0.2, 0.0, 0.0])
+
+
+def test_mitigated_mean_z_inverts_each_physical_qubits_readout_error():
+    import numpy as np
+
+    from qlmaml.garnet import mean_z_from_counts, mitigated_mean_z
+
+    e0, e1 = np.array([0.0, 0.0, 0.1]), np.array([0.2, 0.0, 0.0])
+    # A 2-qubit circuit with circuit qubit 0 on physical qubit 2 and circuit qubit 1 on physical qubit 0.
+    # Circuit qubit 0 reads 1 in 60 % of shots: true P(1) = (0.6 - 0.1) / (1 - 0.1) = 5/9.
+    # Circuit qubit 1 never reads 1: true P(1) = 0. So s = 1 - 2 * (5/9 + 0) / 2 = 4/9.
+    counts = {"01": 60, "00": 40}
+    assert mitigated_mean_z(counts, [2, 0], e0, e1) == pytest.approx(4 / 9)
+    # with no readout error it is the raw readout
+    assert mitigated_mean_z(counts, [2, 0], np.zeros(3), np.zeros(3)) == pytest.approx(mean_z_from_counts(counts, 2))
+    # the inverted probability is clipped to [0, 1]
+    assert mitigated_mean_z({"00": 100}, [2, 0], e0, e1) == pytest.approx(1.0)
+
+
+def test_unsupported_ops_lists_gates_the_backend_cannot_run_on_those_qubits(garnet):
+    from qiskit import QuantumCircuit
+
+    from qlmaml.garnet import measured_circuit, transpile_report, unsupported_ops
+
+    report = transpile_report(measured_circuit(star(3), PARAMS), garnet, seed=1)
+    assert unsupported_ops(report["circuit"], garnet.target) == []  # barriers are not gates
+
+    far = QuantumCircuit(garnet.num_qubits)
+    far.cz(0, garnet.num_qubits - 1)  # no coupler between the first and the last qubit
+    far.h(0)  # not a native gate
+    assert unsupported_ops(far, garnet.target) == [("cz", (0, garnet.num_qubits - 1)), ("h", (0,))]
+
+
+def test_measured_qubits_follow_the_routing_swaps(garnet):
+    from qlmaml.garnet import measured_circuit, measured_qubits, transpile_report
+
+    embedded = transpile_report(measured_circuit(star(3), PARAMS), garnet, seed=1)
+    assert measured_qubits(embedded["circuit"]) == embedded["layout"]  # no SWAPs: nothing moves
+
+    routed = transpile_report(measured_circuit(star(5), PARAMS), garnet, seed=1)
+    final = measured_qubits(routed["circuit"])
+    assert len(final) == 6 and len(set(final)) == 6
+    assert final != routed["layout"]  # the SWAPs moved some accounts before measurement
+
+
+def test_mitigated_mean_z_leaves_a_qubit_raw_when_its_readout_cannot_be_inverted():
+    import numpy as np
+
+    from qlmaml.garnet import mean_z_from_counts, mitigated_mean_z
+
+    # Random readout (e0 = e1 = 0.5, as on a mock): 1 - e0 - e1 = 0, nothing to invert.
+    counts = {"01": 70, "00": 30}
+    assert mitigated_mean_z(counts, [0, 1], np.full(2, 0.5), np.full(2, 0.5)) == pytest.approx(
+        mean_z_from_counts(counts, 2))
+
+
+def test_unsupported_ops_accepts_a_cz_listed_in_the_other_direction():
+    from qiskit import QuantumCircuit
+    from qiskit.circuit import Parameter
+    from qiskit.circuit.library import CZGate, Measure, RGate
+    from qiskit.transpiler import Target
+
+    from qlmaml.garnet import unsupported_ops
+
+    # Live IQM targets list each CZ coupler once, e.g. (3, 8) but not (8, 3); CZ is symmetric.
+    target = Target(num_qubits=9)
+    target.add_instruction(CZGate(), {(3, 8): None})
+    target.add_instruction(RGate(Parameter("t"), Parameter("p")), {(q,): None for q in range(9)})
+    target.add_instruction(Measure(), {(q,): None for q in range(9)})
+    qc = QuantumCircuit(9, 1)
+    qc.cz(8, 3)
+    qc.measure(3, 0)
+    assert unsupported_ops(qc, target) == []
+
+
+class Named:
+    """A backend's qubit names, as IQM backends expose them."""
+
+    def __init__(self, names):
+        self.names = names
+        self.num_qubits = len(names)
+
+    def index_to_qubit_name(self, i):
+        return self.names[i]
+
+
+def test_qubits_are_matched_by_name_when_the_live_chip_lacks_one():
+    from qiskit import QuantumCircuit
+
+    from qlmaml.garnet import qubit_index_map, remap_qubits
+
+    fake = Named(["QB1", "QB2", "QB3", "QB4"])
+    live = Named(["QB1", "QB3", "QB4"])  # QB2 out of calibration: the indices after it shift
+    assert qubit_index_map(fake, live) == {0: 0, 2: 1, 3: 2}
+    assert qubit_index_map(live, fake) == {0: 0, 1: 2, 2: 3}
+
+    qc = QuantumCircuit(4, 2)
+    qc.cz(2, 3)
+    qc.measure(3, 0)
+    qc.measure(2, 1)
+    moved = remap_qubits(qc, qubit_index_map(fake, live), live.num_qubits)
+    assert moved.num_qubits == 3 and moved.num_clbits == 2
+    assert [(i.operation.name, [moved.find_bit(q).index for q in i.qubits]) for i in moved.data] == [
+        ("cz", [1, 2]), ("measure", [2]), ("measure", [1])]
+
+    qc.cz(0, 1)  # QB2 does not exist on the live chip
+    assert remap_qubits(qc, qubit_index_map(fake, live), live.num_qubits) is None

@@ -77,6 +77,61 @@ def transpile_report(circuit, backend, seed: int = 0, initial_layout=None) -> di
     }
 
 
+SYMMETRIC_GATES = frozenset({"cz"})
+
+
+def unsupported_ops(circuit, target) -> list[tuple[str, tuple[int, ...]]]:
+    """(gate, physical qubits) of every instruction of a transpiled `circuit` that `target` does not
+    support on those qubits. Empty when the circuit runs as is (barriers are directives, not gates).
+    WP6 uses it to run circuits transpiled for IQMFakeGarnet unchanged on the real chip."""
+    out = []
+    for instr in circuit.data:
+        if instr.operation.name == "barrier":
+            continue
+        name = instr.operation.name
+        qubits = tuple(circuit.find_bit(q).index for q in instr.qubits)
+        ok = target.instruction_supported(name, qubits)
+        if not ok and name in SYMMETRIC_GATES:  # live IQM targets list each coupler in one direction
+            ok = target.instruction_supported(name, qubits[::-1])
+        if not ok:
+            out.append((name, qubits))
+    return out
+
+
+def qubit_index_map(src, dst) -> dict[int, int]:
+    """Index on `dst` of each qubit of `src`, matched by name (QB1, QB2, ...). Live Garnet drops
+    qubits that are out of calibration and renumbers the rest, so index i on IQMFakeGarnet can be a
+    different qubit on the chip. Qubits missing on `dst` are left out."""
+    on_dst = {dst.index_to_qubit_name(i): i for i in range(dst.num_qubits)}
+    names = {i: src.index_to_qubit_name(i) for i in range(src.num_qubits)}
+    return {i: on_dst[n] for i, n in names.items() if n in on_dst}
+
+
+def remap_qubits(circuit, mapping: dict[int, int], n_qubits: int):
+    """The transpiled `circuit` with physical qubit q moved to mapping[q], on `n_qubits` qubits; the
+    clbits stay. None when the circuit uses a qubit that `mapping` lacks."""
+    from qiskit import QuantumCircuit
+
+    out = QuantumCircuit(n_qubits, circuit.num_clbits, name=circuit.name)
+    for instr in circuit.data:
+        qubits = [circuit.find_bit(q).index for q in instr.qubits]
+        if any(q not in mapping for q in qubits):
+            return None
+        out.append(instr.operation, [mapping[q] for q in qubits], [circuit.find_bit(c).index for c in instr.clbits])
+    return out
+
+
+def measured_qubits(circuit) -> list[int]:
+    """Physical qubit measured into each clbit of a transpiled circuit. After routing SWAPs this is
+    the final position of each account, not `transpile_report`'s initial "layout"; readout
+    mitigation needs it."""
+    out: dict[int, int] = {}
+    for instr in circuit.data:
+        if instr.operation.name == "measure":
+            out[circuit.find_bit(instr.clbits[0]).index] = circuit.find_bit(instr.qubits[0]).index
+    return [out[c] for c in range(circuit.num_clbits)]
+
+
 def relabel(graph, perm):
     """The same subgraph with account i on qubit perm[i]. Gate order comes from timestamps and
     amounts, never from labels (`circuit.graph_from_merged`), so the exact score is unchanged."""
@@ -129,6 +184,51 @@ def sampled_mean_z(circuits, backend, shots: int, seed: int = 0):
     return np.array([mean_z_from_counts(result.get_counts(i), c.num_clbits) for i, c in enumerate(circuits)])
 
 
+def readout_calibration_circuits(n: int):
+    """Two circuits on `n` qubits for readout-error mitigation: prepare all zeros and all ones, measure
+    all. Run them with physical qubit q as circuit qubit q (identity layout), in the same job."""
+    from qiskit import QuantumCircuit
+
+    zeros, ones = QuantumCircuit(n, name="cal_zeros"), QuantumCircuit(n, name="cal_ones")
+    ones.x(range(n))
+    zeros.measure_all()
+    ones.measure_all()
+    return zeros, ones
+
+
+def _ones_per_bit(counts: Mapping[str, int], n: int):
+    """P(clbit i reads 1) for i = 0..n-1. Qiskit writes clbit 0 as the rightmost character."""
+    import numpy as np
+
+    shots = sum(counts.values())
+    p = np.zeros(n)
+    for key, c in counts.items():
+        bits = _bits(key)[::-1]
+        p += c * np.array([bits[i] == "1" for i in range(n)])
+    return p / shots
+
+
+def readout_errors(counts_zeros: Mapping[str, int], counts_ones: Mapping[str, int], n: int):
+    """(e0, e1) per physical qubit from the calibration counts: e0 = P(read 1 | prepared 0),
+    e1 = P(read 0 | prepared 1)."""
+    return _ones_per_bit(counts_zeros, n), 1.0 - _ones_per_bit(counts_ones, n)
+
+
+def mitigated_mean_z(counts: Mapping[str, int], layout, e0, e1) -> float:
+    """s = mean_i <Z_i> with each qubit's readout error inverted (tensor-product model: independent
+    errors per qubit, no crosstalk). Circuit qubit i is measured on physical qubit layout[i]; its
+    true P(1) is (raw P(1) - e0) / (1 - e0 - e1), clipped to [0, 1]."""
+    import numpy as np
+
+    phys = np.asarray(layout)
+    e0, e1 = np.asarray(e0)[phys], np.asarray(e1)[phys]
+    raw = _ones_per_bit(counts, len(phys))
+    gap = 1.0 - e0 - e1
+    # A qubit whose readout carries no information (gap <= 0, e.g. random bits) stays raw.
+    p = np.where(gap > 0, np.clip((raw - e0) / np.where(gap > 0, gap, 1.0), 0.0, 1.0), raw)
+    return float(1.0 - 2.0 * p.mean())
+
+
 FIT_COLUMNS = ("swaps", "cz", "depth", "cz_depth")
 # The per-circuit fields of `transpile_report` that results store (everything but the circuit).
 FIT_FIELDS = ("swaps", "embeds", "cz", "depth", "cz_depth", "layout")
@@ -164,6 +264,56 @@ def equivariance_spread(scores_per_graph) -> dict:
             "mean_range": float(spread.mean()), "max_range": float(spread.max()), "mean_std": float(std.mean())}
 
 
+def pick_hardware_graphs(y, swaps, n_qubits, k: int, max_qubits: int, rng) -> list[int]:
+    """Indices (sorted) of `k` graphs for the hardware run (WP6): at most `max_qubits` accounts, the
+    class ratio of `y` kept, graphs that embed with 0 SWAPs first (random order within a group).
+    Returns fewer than `k` when fewer graphs fit."""
+    import numpy as np
+
+    y = np.asarray(y)
+    fits = np.array([n <= max_qubits for n in n_qubits])
+    n_pos = max(1, round(k * y[fits].mean())) if fits.any() else 0
+    chosen: list[int] = []
+    for label, want in ((1, n_pos), (0, k - n_pos)):
+        idx = rng.permutation(np.flatnonzero((y == label) & fits))
+        chosen += sorted(idx, key=lambda i: swaps[i] > 0)[:want]  # stable: random order within a group
+    return sorted(int(i) for i in chosen)
+
+
+def pick_equivariance_graphs(test, k: int, copies: int, coupling_map, rng) -> list[dict]:
+    """`k` test graphs, class ratio kept. Preference: graphs with at least 3 accounts and `copies`
+    SWAP-free placements on different qubits, then 2-account ones (a single coupler, a weak test),
+    then graphs that need SWAPs. Each gets `copies` random permutations and, when it embeds, one
+    placement per copy."""
+    import numpy as np
+
+    y = test["y"]
+    layouts = {i: embedding_layouts(g, coupling_map, copies, seed=i) for i, g in enumerate(test["graphs"])}
+    n_pos = max(1, round(k * y.mean()))
+    chosen = []
+    for label, want in ((1, n_pos), (0, k - n_pos)):
+        idx = rng.permutation(np.flatnonzero(y == label))
+        rank = {i: (len(layouts[i]) < copies, test["graphs"][i].n < 3) for i in idx}
+        chosen += sorted(idx, key=lambda i: rank[i])[:want]  # stable: random order within a rank
+    out = []
+    for i in sorted(int(i) for i in chosen):
+        n = test["graphs"][i].n
+        perms = [rng.permutation(n).tolist() for _ in range(copies)]
+        embedded = len(layouts[i]) == copies
+        copy_layouts = []
+        for c, perm in enumerate(perms):
+            if embedded:  # account j of the original sits on layouts[i][c][j]; in the copy it is qubit perm[j]
+                lay = [0] * n
+                for j in range(n):
+                    lay[perm[j]] = int(layouts[i][c][j])
+                copy_layouts.append(lay)
+            else:
+                copy_layouts.append(None)
+        out.append({"test_index": i, "label": int(y[i]), "pattern": test["pattern"][i], "n_qubits": n,
+                    "embeds": embedded, "perms": perms, "layouts": copy_layouts})
+    return out
+
+
 def newest_trained_params(results_dir, dataset: str, model: str, cache: str, seed: int = 0):
     """(params, run file, per-seed row) of `seed` at the largest training fraction in the newest WP3 run of
     `model` (e.g. "qgnn-zx-p1-n8") trained on `cache`; None when there is no such run. The row
@@ -180,4 +330,24 @@ def newest_trained_params(results_dir, dataset: str, model: str, cache: str, see
         if rows and run["data"]["cache"] == cache:
             row = max(rows, key=lambda r: r["fraction"])
             return np.array(list(row["trained_params"].values())), f.relative_to(results_dir).as_posix(), row
+    return None
+
+
+def newest_equivariance_copies(results_dir, dataset: str, model: str, cache: str, seed: int, params):
+    """(copies, run file) of the newest WP5 "fakegarnet" run (`scripts/eval_noisy.py`) of `model`
+    (e.g. "qgnn-zx-p1-n8") on `cache` with this shot `seed` and these `params`; None when there is
+    none. WP6 reruns exactly these relabelled copies (permutations and pinned layouts) on hardware."""
+    import json
+    from pathlib import Path
+
+    import numpy as np
+
+    results_dir = Path(results_dir)
+    for f in sorted((results_dir / dataset).glob(f"{model}-fakegarnet_*.json"), reverse=True):
+        run = json.loads(f.read_text(encoding="utf-8"))
+        cfg = run.get("config", {})
+        if (run.get("data", {}).get("cache") == cache and cfg.get("seed") == seed
+                and len(cfg.get("params", [])) == len(params) and np.allclose(cfg["params"], params)
+                and run.get("equivariance_copies")):
+            return run["equivariance_copies"], f.relative_to(results_dir).as_posix()
     return None

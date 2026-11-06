@@ -43,11 +43,11 @@ import numpy as np
 from qlmaml.circuit import build_gates, statevector_mean_z  # noqa: E402
 from qlmaml.garnet import (  # noqa: E402
     FIT_FIELDS,
-    embedding_layouts,
     equivariance_spread,
     fit_table,
     measured_circuit,
     newest_trained_params,
+    pick_equivariance_graphs,
     relabel,
     sampled_mean_z,
     transpile_report,
@@ -101,38 +101,6 @@ class Runner:
     def all_modes(self, graphs, layouts=None, seeds=None):
         noisy, fit = self.garnet_scores(graphs, layouts, seeds)
         return {"exact": self.exact(graphs), "aer": self.aer_scores(graphs), "fakegarnet": noisy}, fit
-
-
-def pick_equivariance_graphs(test, k: int, copies: int, coupling_map, rng) -> list[dict]:
-    """`k` test graphs, class ratio kept. Preference: graphs with at least 3 accounts and `copies`
-    SWAP-free placements on different qubits, then 2-account ones (a single coupler, a weak test),
-    then graphs that need SWAPs. Each gets `copies` random permutations and, when it embeds, one
-    placement per copy."""
-    y = test["y"]
-    layouts = {i: embedding_layouts(g, coupling_map, copies, seed=i) for i, g in enumerate(test["graphs"])}
-    n_pos = max(1, round(k * y.mean()))
-    chosen = []
-    for label, want in ((1, n_pos), (0, k - n_pos)):
-        idx = rng.permutation(np.flatnonzero(y == label))
-        rank = {i: (len(layouts[i]) < copies, test["graphs"][i].n < 3) for i in idx}
-        chosen += sorted(idx, key=lambda i: rank[i])[:want]  # stable: random order within a rank
-    out = []
-    for i in sorted(int(i) for i in chosen):
-        n = test["graphs"][i].n
-        perms = [rng.permutation(n).tolist() for _ in range(copies)]
-        embedded = len(layouts[i]) == copies
-        copy_layouts = []
-        for c, perm in enumerate(perms):
-            if embedded:  # account j of the original sits on layouts[i][c][j]; in the copy it is qubit perm[j]
-                lay = [0] * n
-                for j in range(n):
-                    lay[perm[j]] = int(layouts[i][c][j])
-                copy_layouts.append(lay)
-            else:
-                copy_layouts.append(None)
-        out.append({"test_index": i, "label": int(y[i]), "pattern": test["pattern"][i], "n_qubits": n,
-                    "embeds": embedded, "perms": perms, "layouts": copy_layouts})
-    return out
 
 
 def run_equivariance(runner: Runner, test, picked: list[dict]) -> tuple[dict, list[dict]]:
