@@ -2,14 +2,26 @@
 
     uv run python scripts/train_qgnn.py --note "first WP3 runs"          # n8 and n12: zx-p1, zx-p2, rzz-p1
     uv run python scripts/train_qgnn.py --n 8 --models zx-p1 --fractions 1.0 --note "quick check"
+    uv run python scripts/train_qgnn.py --seeds 0 1 2 3 4 --note "..."     # 5 seeds, bootstrap CIs
     uv run python scripts/train_qgnn.py --fake                            # smoke test, synthetic data
 
 Reads data/processed/subgraphs_<name>_n<k>.parquet (WP1, `scripts/build_subgraphs.py`). For every
 cache and model it trains on 10 %, 25 %, 50 % and 100 % of the training split (stratified, nested,
 `qlmaml.qgnn.nested_subsamples`); validation and test are always the full splits (temporal,
 60/20/20 by subgraph start time). Each (model, n) is one `record_run` with model name
-`qgnn-<gate>-p<p>-n<k>`: its "val"/"test" metrics come from the 100 % run, and "learning_curve"
-holds every fraction. The test threshold is the best-F1 threshold on validation, frozen for test.
+`qgnn-<gate>-p<p>-n<k>`. The test threshold is the best-F1 threshold on validation, frozen for test.
+
+Seeds (`--seeds`): one seed drives the parameter init, the mini-batch order and the nested training
+subsets, so seed k of zx-p1 and seed k of rzz-p1 see the same training examples. The (model, seed)
+curves run in parallel processes (`--workers`). In the result:
+
+- "val"/"test": mean over seeds of each metric at the largest fraction (the leaderboard row).
+- "learning_curve": per fraction, mean and std over seeds of the test PR-AUC and a stratified
+  bootstrap 95 % CI of the seed-mean test PR-AUC (1,000 resamples of the test subgraphs,
+  `qlmaml.metrics.bootstrap_ci`). The CI is test-set sampling; the std is seed-to-seed variation.
+- "per_seed": every seed's curve, with its test scores (so WP4 and later scripts can pair with it).
+- "paired" (every model except the reference rzz-p1): paired bootstrap of the test PR-AUC difference
+  model - rzz-p1 on the same resampled test subgraphs (`qlmaml.metrics.paired_bootstrap_diff`).
 
 Models: zx-p1, zx-p2 (directed ZX gate, 1 or 2 layers) and rzz-p1 (symmetric RZZ, the direction
 ablation). Exact noiseless statevector, no shots (shots and noise: WP5).
@@ -17,23 +29,32 @@ ablation). Exact noiseless statevector, no shots (shots and noise: WP5).
 
 from __future__ import annotations
 
-import argparse
-import re
-import time
-from pathlib import Path
+import os
 
-import numpy as np
-import polars as pl
+# One BLAS thread per process: parallelism comes from the worker processes (set before numpy loads).
+for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
 
-from qlmaml.circuit import param_names
-from qlmaml.metrics import evaluate, recall_by_pattern
-from qlmaml.qgnn import LEARNING_CURVE, TrainConfig, graph_from_cache_row, nested_subsamples, predict, train
-from qlmaml.subgraphs import build_fake_cache
-from qlmaml.tracking import record_run
+import argparse  # noqa: E402
+import re  # noqa: E402
+import time  # noqa: E402
+from concurrent.futures import ProcessPoolExecutor  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import numpy as np  # noqa: E402
+import polars as pl  # noqa: E402
+
+from qlmaml.circuit import param_names  # noqa: E402
+from qlmaml.metrics import bootstrap_ci, evaluate, paired_bootstrap_diff, recall_by_pattern  # noqa: E402
+from qlmaml.qgnn import LEARNING_CURVE, TrainConfig, graph_from_cache_row, nested_subsamples, predict, train  # noqa: E402
+from qlmaml.subgraphs import build_fake_cache  # noqa: E402
+from qlmaml.tracking import record_run  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "data" / "processed"
 MODELS = {"zx-p1": ("zx", 1), "zx-p2": ("zx", 2), "rzz-p1": ("rzz", 1)}
+REFERENCE = "rzz-p1"  # the direction ablation: paired differences are (model - reference)
+N_BOOT = 1000
 
 
 def load_cache(path: Path) -> dict[str, dict]:
@@ -70,8 +91,60 @@ def run_fraction(data, idx, cfg: TrainConfig) -> dict:
         "test_recall_by_pattern": recall_by_pattern(te["y"], test_scores, te["pattern"], val["threshold"]),
         "trained_params": dict(zip(param_names(cfg.p), map(float, fit.params))),
         "history": fit.history,
+        "test_scores": [round(float(x), 6) for x in test_scores],
     }
 
+
+def run_seed(cache: Path, key: str, seed: int, fractions: list[float], hp: dict) -> list[dict]:
+    """One (model, seed): the learning curve over all fractions. Runs in a worker process."""
+    data = load_cache(cache)
+    subsets = nested_subsamples(data["train"]["y"], fractions, seed=seed)
+    gate, p = MODELS[key]
+    cfg = TrainConfig(edge_gate=gate, p=p, seed=seed, **hp)
+    curve = []
+    for f in fractions:
+        row = {"fraction": f, "seed": seed, **run_fraction(data, subsets[f], cfg)}
+        curve.append(row)
+        print(f"  {key} {cache.stem} seed {seed} f={f:.2f} (n_train={row['n_train']}): "
+              f"test PR-AUC {row['test']['pr_auc']:.3f}, epochs {row['epochs_run']}, {row['seconds']:.0f}s",
+              flush=True)
+    return curve
+
+
+def _mean_metrics(rows: list[dict]) -> dict:
+    """Mean over seeds of every metric (the threshold is chosen per seed, so this is its mean)."""
+    return {k: float(np.mean([r[k] for r in rows])) for k in rows[0]}
+
+
+def aggregate(curves: dict[int, list[dict]], y_test: np.ndarray, fractions: list[float]) -> list[dict]:
+    """Per fraction: mean/std over seeds and the bootstrap CI of the seed-mean test PR-AUC."""
+    out = []
+    for i, f in enumerate(fractions):
+        rows = [curves[s][i] for s in sorted(curves)]
+        pr = np.array([r["test"]["pr_auc"] for r in rows])
+        scores = np.array([r["test_scores"] for r in rows])
+        out.append({
+            "fraction": f,
+            "n_train": rows[0]["n_train"],
+            "n_seeds": len(rows),
+            "test_pr_auc_mean": float(pr.mean()),
+            "test_pr_auc_std": float(pr.std(ddof=1)) if len(rows) > 1 else 0.0,
+            "test_pr_auc_ci": bootstrap_ci(y_test, scores, n_boot=N_BOOT, seed=0),
+            "val": _mean_metrics([r["val"] for r in rows]),
+            "test": _mean_metrics([r["test"] for r in rows]),
+        })
+    return out
+
+
+def paired_vs_reference(curves: dict, ref: dict, y_test: np.ndarray, fractions: list[float]) -> list[dict]:
+    """Paired bootstrap of (model - reference) test PR-AUC per fraction, over the seeds both have."""
+    seeds = sorted(set(curves) & set(ref))
+    out = []
+    for i, f in enumerate(fractions):
+        a = np.array([curves[s][i]["test_scores"] for s in seeds])
+        b = np.array([ref[s][i]["test_scores"] for s in seeds])
+        out.append({"fraction": f, "seeds": seeds, **paired_bootstrap_diff(y_test, a, b, n_boot=N_BOOT, seed=0)})
+    return out
 
 
 def main() -> None:
@@ -84,13 +157,17 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--max-epochs", type=int, default=30)
     ap.add_argument("--patience", type=int, default=5)
-    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--seeds", type=int, nargs="+", default=[0],
+                    help="training seeds: init, batch order and nested subsets (e.g. 0 1 2 3 4)")
+    ap.add_argument("--workers", type=int, default=min(16, os.cpu_count() or 1),
+                    help="parallel processes, one (model, seed) curve each")
     ap.add_argument("--note", default="", help="what changed in this run (required, goes to the leaderboard)")
     ap.add_argument("--fake", action="store_true", help="synthetic FAKE-Small cache, 3 epochs (never report it)")
     args = ap.parse_args()
+    seeds = sorted(set(args.seeds))
 
     if args.fake:
-        caches = [build_fake_cache(PROCESSED, seed=args.seed)]
+        caches = [build_fake_cache(PROCESSED, seed=seeds[0])]
         args.max_epochs, args.note = 3, args.note or "smoke test"
     else:
         if not args.note:
@@ -100,39 +177,55 @@ def main() -> None:
         if missing:
             ap.error(f"missing cache {missing}: run scripts/build_subgraphs.py first")
     fractions = sorted(set(args.fractions))
+    hp = {"lr": args.lr, "batch_size": args.batch_size, "max_epochs": args.max_epochs, "patience": args.patience}
 
     for cache in caches:
         name, k = re.fullmatch(r"subgraphs_(.+)_n(\d+)", cache.stem).groups()
         data = load_cache(cache)
         sizes = {s: {"n": len(d["y"]), "pos": int(d["y"].sum())} for s, d in data.items()}
-        print(f"[{name} n{k}] {sizes}")
-        subsets = nested_subsamples(data["train"]["y"], fractions, seed=args.seed)
+        y_test = data["test"]["y"]
+        print(f"[{name} n{k}] {sizes}, seeds {seeds}", flush=True)
+        t0 = time.time()
+        jobs = [(key, s) for key in args.models for s in seeds]
+        with ProcessPoolExecutor(max_workers=max(1, min(args.workers, len(jobs)))) as pool:
+            futures = {job: pool.submit(run_seed, cache, *job, fractions, hp) for job in jobs}
+            curves = {key: {s: futures[(key, s)].result() for s in seeds} for key in args.models}
+        print(f"  trained {len(jobs)} (model, seed) curves in {time.time() - t0:.0f}s", flush=True)
+
         for key in args.models:
             gate, p = MODELS[key]
-            cfg = TrainConfig(edge_gate=gate, p=p, lr=args.lr, batch_size=args.batch_size,
-                              max_epochs=args.max_epochs, patience=args.patience, seed=args.seed)
-            curve = []
-            for f in fractions:
-                t0 = time.time()
-                row = {"fraction": f, **run_fraction(data, subsets[f], cfg)}
-                curve.append(row)
-                print(f"  {cfg.model}-n{k} f={f:.2f} (n_train={row['n_train']}): "
-                      f"val PR-AUC {row['val']['pr_auc']:.3f}, test PR-AUC {row['test']['pr_auc']:.3f}, "
-                      f"test F1 {row['test']['f1_at_threshold']:.3f}, epochs {row['epochs_run']} "
-                      f"(best {row['best_epoch']}), {time.time() - t0:.0f}s")
-            full = curve[-1]  # the largest fraction: 1.0 unless --fractions leaves it out
+            cfg = TrainConfig(edge_gate=gate, p=p, seed=seeds[0], **hp)
+            agg = aggregate(curves[key], y_test, fractions)
+            full = agg[-1]  # the largest fraction: 1.0 unless --fractions leaves it out
             result = {
                 "headline_fraction": full["fraction"],
+                "seeds": seeds,
                 "val": full["val"],
                 "test": full["test"],
-                "test_recall_by_pattern": full["test_recall_by_pattern"],
-                "trained_params": full["trained_params"],
-                "n_trainable_params": len(full["trained_params"]),
-                "learning_curve": [{key: v for key, v in row.items() if key != "history"} for row in curve],
-                "history": {str(row["fraction"]): row["history"] for row in curve},
+                "test_pr_auc_ci": full["test_pr_auc_ci"],
+                "test_pr_auc_std_over_seeds": full["test_pr_auc_std"],
+                "n_trainable_params": len(param_names(p)),
+                "learning_curve": agg,
+                "per_seed": {str(s): [{c: v for c, v in row.items() if c != "history"} for row in curve]
+                             for s, curve in curves[key].items()},
+                "history": {str(s): {str(row["fraction"]): row["history"] for row in curve}
+                            for s, curve in curves[key].items()},
                 "data": {"cache": cache.name, "max_nodes": int(k), "splits": sizes},
-                "config": {**cfg.__dict__, "fractions": fractions, "simulator": "exact statevector (noiseless)"},
+                "config": {**cfg.__dict__, "seed": None, "seeds": seeds, "fractions": fractions, "n_boot": N_BOOT,
+                           "ci": "stratified percentile bootstrap over test subgraphs of the seed-mean PR-AUC",
+                           "simulator": "exact statevector (noiseless)"},
             }
+            if key != REFERENCE and REFERENCE in curves:
+                result["paired"] = {"reference": REFERENCE,
+                                    "test_pr_auc_diff": paired_vs_reference(curves[key], curves[REFERENCE],
+                                                                            y_test, fractions)}
+            for row in agg:
+                ci = row["test_pr_auc_ci"]
+                print(f"  {cfg.model}-n{k} f={row['fraction']:.2f}: test PR-AUC {row['test_pr_auc_mean']:.3f} "
+                      f"+- {row['test_pr_auc_std']:.3f} (95% CI {ci['lo']:.3f}-{ci['hi']:.3f})")
+            for row in result.get("paired", {}).get("test_pr_auc_diff", []):
+                print(f"    {key} - {REFERENCE} f={row['fraction']:.2f}: {row['diff']:+.3f} "
+                      f"(95% CI {row['lo']:+.3f} to {row['hi']:+.3f}, P(not better) {row['p_a_not_better']:.3f})")
             out = record_run(result, dataset=name, model=f"{cfg.model}-n{k}", note=args.note)
             print(f"  -> {out}")
 
