@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import polars as pl
 import pytest
 
-from qlmaml.features import subgraph_features
+from qlmaml.features import subgraph_feature_matrix, subgraph_features
 
 T0 = datetime(2022, 9, 1, 8, 0)
 
@@ -71,10 +72,6 @@ def test_empty_subgraph_gives_zeros():
 
 
 def test_feature_matrix_rows_follow_the_cache_frame():
-    import polars as pl
-
-    from qlmaml.features import subgraph_feature_matrix
-
     df = pl.DataFrame([
         _row(3, [(0, 1, 50.0, 1, 0), (1, 2, 50.0, 1, 1), (0, 2, 50.0, 1, 2)]),  # no-return triangle
         _row(3, [(0, 1, 50.0, 1, 0), (1, 2, 50.0, 1, 1), (2, 0, 50.0, 1, 2)]),  # cycle

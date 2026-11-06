@@ -9,6 +9,10 @@
 - Add `qlmaml.qgnn`: `train`, `predict`, `graph_from_cache_row` and `nested_subsamples` (stratified, nested, seeded subsets that WP4 reuses)
 - Add `qlmaml.circuit.statevector_mean_z`: exact numpy statevector with an adjoint gradient, about 10x faster than PennyLane for training, checked against PennyLane value and gradient
 - Add `qlmaml.circuit.graph_from_merged` for edges that are already merged (the parquet cache)
+- Add `qlmaml.features.subgraph_features` and `subgraph_feature_matrix`: directed graph features per cached subgraph (issue #8)
+- Add `scripts/train_xgb_subgraph.py`: XGBoost on the WP1 subgraph cache with the WP3 learning curve, recorded as `xgb-subgraph-n<k>`
+- Add WP4 HI-Small runs for n = 8 and n = 12, with and without the time-span feature
+- Move `recall_by_pattern` to `qlmaml.metrics` and the `--fake` cache builder to `qlmaml.subgraphs.build_fake_cache`, shared by WP3 and WP4
 
 ## [0.0.1] — 2026-11-06
 
@@ -26,9 +30,6 @@
 - Add a BIPARTITE motif and an optional `*_Patterns.txt` output to the fake data generator
 - Add the reveal.js slide deck `docs/slides/index.html` with the dataset section, for GitHub Pages
 - Add HI-Small build summaries for n = 8 and n = 12 in `reports/HI-Small/`
-- Add `qlmaml.features.subgraph_features` and `subgraph_feature_matrix`: directed graph features per cached subgraph (issue #8)
-- Add `scripts/train_xgb_subgraph.py`: XGBoost on the WP1 subgraph cache with the WP3 learning curve, recorded as `xgb-subgraph-n<k>`
-- Add WP4 HI-Small runs for n = 8 and n = 12, with and without the time-span feature
 
 ### Changed
 - Break ties in `GraphDB.ego_subgraph` neighbour order by account id, so extraction is deterministic

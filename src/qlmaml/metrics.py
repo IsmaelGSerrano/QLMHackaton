@@ -33,3 +33,12 @@ def evaluate(y_true: np.ndarray, scores: np.ndarray, threshold: float | None = N
         "recall_at_fpr_0.1pct": recall_at_fpr(y_true, scores, 0.001),
         "recall_at_fpr_1pct": recall_at_fpr(y_true, scores, 0.01),
     }
+
+
+def recall_by_pattern(y_true: np.ndarray, scores: np.ndarray, patterns: list[str | None], threshold: float) -> dict[str, dict]:
+    """Positives per motif type: count and recall at a fixed (validation-chosen) threshold."""
+    out = {}
+    for pattern in sorted({p for p, label in zip(patterns, y_true) if label == 1}):
+        mask = np.array([p == pattern for p in patterns]) & (y_true == 1)
+        out[pattern] = {"n": int(mask.sum()), "recall": float((scores[mask] > threshold).mean())}
+    return out

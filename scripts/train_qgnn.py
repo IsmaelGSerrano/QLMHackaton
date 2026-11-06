@@ -20,15 +20,15 @@ from __future__ import annotations
 import argparse
 import re
 import time
-from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
 import polars as pl
 
 from qlmaml.circuit import param_names
-from qlmaml.metrics import evaluate
+from qlmaml.metrics import evaluate, recall_by_pattern
 from qlmaml.qgnn import LEARNING_CURVE, TrainConfig, graph_from_cache_row, nested_subsamples, predict, train
+from qlmaml.subgraphs import build_fake_cache
 from qlmaml.tracking import record_run
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,14 +49,6 @@ def load_cache(path: Path) -> dict[str, dict]:
         }
     return out
 
-
-def recall_by_pattern(y, scores, patterns, threshold) -> dict[str, dict]:
-    """Test positives per motif type: count and recall at the frozen threshold."""
-    out = {}
-    for pattern in sorted({p for p, label in zip(patterns, y) if label == 1}):
-        mask = np.array([p == pattern for p in patterns]) & (y == 1)
-        out[pattern] = {"n": int(mask.sum()), "recall": float((scores[mask] > threshold).mean())}
-    return out
 
 
 def run_fraction(data, idx, cfg: TrainConfig) -> dict:
@@ -81,18 +73,6 @@ def run_fraction(data, idx, cfg: TrainConfig) -> dict:
     }
 
 
-def build_fake_cache(seed: int) -> Path:
-    """Synthetic subgraph cache (FAKE-Small, n6) through the WP1 pipeline, no Neo4j."""
-    from qlmaml.fake_data import write_fake_transactions
-    from qlmaml.subgraphs import FrameGraph, build_dataset, write_cache
-
-    trans = write_fake_transactions(PROCESSED / "FAKE-Small_Trans.csv", n_accounts=300, n_normal=6_000, n_motifs=30,
-                                    patterns_path=PROCESSED / "FAKE-Small_Patterns.txt", seed=seed)
-    src = FrameGraph.from_files(trans, PROCESSED / "FAKE-Small_Patterns.txt")
-    ds = build_dataset(src, max_nodes=6, ratio=5, edge_tol=1, hops=2, window=timedelta(hours=24), max_tries=200,
-                       seed=seed)
-    return write_cache(ds.samples, PROCESSED / "subgraphs_FAKE-Small_n6.parquet", usd_rates=src.usd_rates())
-
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -110,7 +90,7 @@ def main() -> None:
     args = ap.parse_args()
 
     if args.fake:
-        caches = [build_fake_cache(args.seed)]
+        caches = [build_fake_cache(PROCESSED, seed=args.seed)]
         args.max_epochs, args.note = 3, args.note or "smoke test"
     else:
         if not args.note:
