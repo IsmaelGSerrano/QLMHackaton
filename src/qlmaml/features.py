@@ -18,7 +18,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import numpy as np
-import polars as pl
+
+try:
+    import polars as pl
+except ImportError:  # the inference image (inference/) uses only `subgraph_features`, which needs no polars
+    pl = None
 
 RAW_FEATURES = [
     "amount_paid_log",

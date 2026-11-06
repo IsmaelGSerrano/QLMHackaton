@@ -1,0 +1,13 @@
+# Build context is the repo root; send only what inference/Dockerfile copies.
+*
+!inference/pyproject.toml
+!inference/uv.lock
+!inference/app.py
+!inference/static/
+!inference/bundle/
+!src/qlmaml/__init__.py
+!src/qlmaml/circuit.py
+!src/qlmaml/features.py
+!src/qlmaml/garnet.py
+!src/qlmaml/hardware.py
+!src/qlmaml/qpu_pick.py
