@@ -16,6 +16,9 @@
 - Add a BIPARTITE motif and an optional `*_Patterns.txt` output to the fake data generator
 - Add the reveal.js slide deck `docs/slides/index.html` with the dataset section, for GitHub Pages
 - Add HI-Small build summaries for n = 8 and n = 12 in `reports/HI-Small/`
+- Add `qlmaml.features.subgraph_features` and `subgraph_feature_matrix`: directed graph features per cached subgraph (issue #8)
+- Add `scripts/train_xgb_subgraph.py`: XGBoost on the WP1 subgraph cache with the WP3 learning curve, recorded as `xgb-subgraph-n<k>`
+- Add WP4 HI-Small runs for n = 8 and n = 12, with and without the time-span feature
 
 ### Changed
 - Break ties in `GraphDB.ego_subgraph` neighbour order by account id, so extraction is deterministic
