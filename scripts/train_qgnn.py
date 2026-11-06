@@ -42,33 +42,17 @@ from concurrent.futures import ProcessPoolExecutor  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 import numpy as np  # noqa: E402
-import polars as pl  # noqa: E402
 
 from qlmaml.circuit import param_names  # noqa: E402
 from qlmaml.metrics import evaluate, paired_curves, recall_by_pattern, seed_curve_summary  # noqa: E402
-from qlmaml.qgnn import LEARNING_CURVE, TrainConfig, graph_from_cache_row, nested_subsamples, predict, train  # noqa: E402
+from qlmaml.qgnn import LEARNING_CURVE, MODELS, TrainConfig, load_graph_cache, nested_subsamples, predict, train  # noqa: E402
 from qlmaml.subgraphs import build_fake_cache  # noqa: E402
 from qlmaml.tracking import record_run  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "data" / "processed"
-MODELS = {"zx-p1": ("zx", 1), "zx-p2": ("zx", 2), "rzz-p1": ("rzz", 1)}
 REFERENCE = "rzz-p1"  # the direction ablation: paired differences are (model - reference)
 N_BOOT = 1000
-
-
-def load_cache(path: Path) -> dict[str, dict]:
-    """Per split: CircuitGraphs, labels, patterns (None for negatives)."""
-    df = pl.read_parquet(path)
-    out = {}
-    for split in ("train", "val", "test"):
-        rows = df.filter(pl.col("split") == split).to_dicts()
-        out[split] = {
-            "graphs": [graph_from_cache_row(r) for r in rows],
-            "y": np.array([r["label"] for r in rows]),
-            "pattern": [r["pattern"] for r in rows],
-        }
-    return out
 
 
 
@@ -97,7 +81,7 @@ def run_fraction(data, idx, cfg: TrainConfig) -> dict:
 
 def run_seed(cache: Path, key: str, seed: int, fractions: list[float], hp: dict) -> list[dict]:
     """One (model, seed): the learning curve over all fractions. Runs in a worker process."""
-    data = load_cache(cache)
+    data = load_graph_cache(cache)
     subsets = nested_subsamples(data["train"]["y"], fractions, seed=seed)
     gate, p = MODELS[key]
     cfg = TrainConfig(edge_gate=gate, p=p, seed=seed, **hp)
@@ -145,7 +129,7 @@ def main() -> None:
 
     for cache in caches:
         name, k = re.fullmatch(r"subgraphs_(.+)_n(\d+)", cache.stem).groups()
-        data = load_cache(cache)
+        data = load_graph_cache(cache)
         sizes = {s: {"n": len(d["y"]), "pos": int(d["y"].sum())} for s, d in data.items()}
         y_test = data["test"]["y"]
         print(f"[{name} n{k}] {sizes}, seeds {seeds}", flush=True)
