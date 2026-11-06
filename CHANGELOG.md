@@ -16,6 +16,10 @@
 - Add `--seeds` to `scripts/train_xgb_subgraph.py`: mean and std over seeds, bootstrap 95 % CI of test PR-AUC, paired bootstrap difference against WP3 `qgnn-zx-p1` (seed k against seed k)
 - Move the per-seed learning-curve summary to `qlmaml.metrics.seed_curve_summary` and `paired_curves`, shared by WP3 and WP4
 - Draw `xgb-subgraph` in `scripts/plot_learning_curve.py` as the classical reference line
+- Add `qlmaml.garnet` (issue #9): `transpile_report` (SWAPs inserted by routing, CZ count, depth, CZ depth, physical layout at optimization level 3 for Garnet), `mean_z_from_counts`, `sampled_mean_z`, `relabel`, `embedding_layouts` (SWAP-free placements on the coupling map), `fit_table` and `equivariance_spread`
+- Add `scripts/garnet_fit.py`: the "motif fit on Garnet" table for every test circuit of the n8 and n12 caches, written to `results/hardware/garnet_fit_<name>_n<k>_<UTC>Z.json`
+- Add `scripts/eval_noisy.py`: run the trained WP3 model exact, on noiseless Aer and on IQMFakeGarnet with 2,000 shots, one `record_run` per mode (`qgnn-<model>-n<k>-<mode>`), and the equivariance spread over 20 test graphs x 3 relabelled copies on different physical qubits
+- Add WP5 HI-Small runs: Garnet fit for n8 and n12, noisy evaluation of `qgnn-zx-p1-n8` (seed 0)
 
 ## [0.0.1] — 2026-11-06
 

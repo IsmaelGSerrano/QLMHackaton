@@ -28,6 +28,8 @@ from sklearn.metrics import average_precision_score
 from qlmaml.circuit import CircuitGraph, EdgeGate, build_gates, graph_from_merged, n_params, statevector_mean_z
 
 LEARNING_CURVE = (0.1, 0.25, 0.5, 1.0)
+# The WP3 models: name -> (edge gate, layers). rzz-p1 is the direction ablation.
+MODELS: dict[str, tuple[EdgeGate, int]] = {"zx-p1": ("zx", 1), "zx-p2": ("zx", 2), "rzz-p1": ("rzz", 1)}
 
 
 def nested_subsamples(labels, fractions: Sequence[float] = LEARNING_CURVE, seed: int = 0) -> dict[float, np.ndarray]:
@@ -57,6 +59,23 @@ def graph_from_cache_row(row: Mapping) -> CircuitGraph:
     merged = [(e["u"], e["v"], e["total_usd"], e["n_tx"], (e["first_ts"] - _EPOCH).total_seconds())
               for e in row["edges"]]
     return graph_from_merged(row["n_qubits"], merged)
+
+
+def load_graph_cache(path) -> dict[str, dict]:
+    """Per split ("train", "val", "test") of a WP1 parquet cache: CircuitGraphs, labels and
+    patterns (None for negatives). Shared by WP3 training and the WP5/WP6 hardware scripts."""
+    import polars as pl
+
+    df = pl.read_parquet(path)
+    out = {}
+    for split in ("train", "val", "test"):
+        rows = df.filter(pl.col("split") == split).to_dicts()
+        out[split] = {
+            "graphs": [graph_from_cache_row(r) for r in rows],
+            "y": np.array([r["label"] for r in rows]),
+            "pattern": [r["pattern"] for r in rows],
+        }
+    return out
 
 
 @dataclass(frozen=True)
