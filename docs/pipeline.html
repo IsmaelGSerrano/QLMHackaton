@@ -1,0 +1,977 @@
+<title>AML Subgraph Circuit Pipeline</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one long schematic sheet. A vertical "wire" runs down the left like a circuit line;
+   each pipeline stage hangs off it as a gate. Classical stages, quantum stages and hardware
+   stages are told apart by the colour of their marker. */
+:root {
+  --paper: #F4F6F9;
+  --sheet: #FFFFFF;
+  --ink: #161D2B;
+  --muted: #5B6578;
+  --rule: #D8DDE6;
+  --accent: #3446B8;      /* indigo: stage markers, links */
+  --payer: #B9541A;       /* copper: Z end of an edge gate (payer) */
+  --payee: #0F7380;       /* teal: X end of an edge gate (payee) */
+  --hw: #7A3FA0;          /* violet: hardware stages */
+  --good: #2E7D4F;
+  --warn: #A3401F;
+  --code-bg: #EDF0F5;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0E131C; --sheet: #151B27; --ink: #E5E9F1; --muted: #98A2B6; --rule: #2A3243;
+    --accent: #8E9BFF; --payer: #E8894A; --payee: #4CC0CC; --hw: #C08CE6; --good: #6CC793; --warn: #F08A64;
+    --code-bg: #1C2433; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0E131C; --sheet: #151B27; --ink: #E5E9F1; --muted: #98A2B6; --rule: #2A3243;
+  --accent: #8E9BFF; --payer: #E8894A; --payee: #4CC0CC; --hw: #C08CE6; --good: #6CC793; --warn: #F08A64;
+  --code-bg: #1C2433; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 40px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(28px, 4.4vw, 44px); font-weight: 800; line-height: 1.08; }
+h2 { font-size: clamp(21px, 2.6vw, 27px); font-weight: 800; }
+h3 { font-size: 16px; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+a { color: var(--accent); }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Header */
+header { display: grid; gap: 14px; }
+header p { font-size: 16.5px; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+
+/* Stage strip */
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 6px; }
+.strip a {
+  text-decoration: none; color: var(--ink); background: var(--sheet); border: 1px solid var(--rule);
+  border-top: 3px solid var(--c); padding: 8px 10px 9px; border-radius: 4px; display: grid; gap: 2px; font-size: 13px; line-height: 1.3;
+}
+.strip a:hover, .strip a:focus-visible { border-color: var(--c); outline: none; }
+.strip b { font-family: var(--mono); font-size: 11px; color: var(--c); font-weight: 500; }
+
+/* Stage sections hanging off a wire */
+.rail { position: relative; display: grid; gap: 36px; padding-left: 44px; }
+.rail::before { content: ""; position: absolute; left: 15px; top: 8px; bottom: 8px; width: 2px; background: var(--rule); }
+.stage { position: relative; display: grid; gap: 14px; scroll-margin-top: 16px; }
+.stage > .marker {
+  position: absolute; left: -44px; top: 0; width: 32px; height: 32px; border-radius: 4px;
+  background: var(--sheet); border: 2px solid var(--c); color: var(--c);
+  font-family: var(--mono); font-weight: 500; font-size: 13px; display: grid; place-items: center;
+}
+.stage .head { display: grid; gap: 4px; }
+.files { display: flex; flex-wrap: wrap; gap: 6px; }
+.files code { font-size: 12px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; align-items: start; }
+.cols > * { min-width: 0; }
+.panel { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 16px; display: grid; gap: 10px; min-width: 0; }
+ul.tight { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.k { color: var(--muted); font-size: 13px; }
+
+/* Funnel */
+.funnel { display: grid; gap: 6px; }
+.frow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 13.5px; }
+.fbar { height: 22px; background: color-mix(in srgb, var(--accent) 16%, transparent); border-left: 3px solid var(--accent); border-radius: 0 3px 3px 0;
+  display: flex; align-items: center; padding-left: 8px; white-space: nowrap; overflow: hidden; }
+.frow .n { font-family: var(--mono); font-size: 13px; text-align: right; }
+.fbar.hi { background: color-mix(in srgb, var(--accent) 34%, transparent); font-weight: 600; }
+.capnote { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; }
+.logchart { display: grid; gap: 8px; }
+.lrow { display: grid; grid-template-columns: minmax(110px, 190px) minmax(0, 1fr); gap: 10px; align-items: center; font-size: 13px; }
+.ltrack { position: relative; height: 24px; background:
+  repeating-linear-gradient(to right, var(--rule) 0 1px, transparent 1px 25%); border-right: 1px solid var(--rule); }
+.lbar { position: relative; height: 100%; background: var(--c); border-radius: 0 3px 3px 0; }
+.lbar span { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); font-family: var(--mono); font-size: 12px; padding-left: 6px; white-space: nowrap; color: var(--ink); }
+#time td:first-child { white-space: normal; }
+.laxis { display: grid; grid-template-columns: minmax(110px, 190px) minmax(0, 1fr); gap: 10px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.laxis div { display: flex; justify-content: space-between; }
+#time { scroll-margin-top: 16px; }
+
+/* Tables */
+.tscroll { overflow-x: auto; min-width: 0; max-width: 100%; }
+.stage > *, .panel > *, .lab > *, .rail > * { min-width: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+tr.hl td { font-weight: 600; }
+
+/* Circuit lab */
+.lab { background: var(--sheet); border: 1px solid var(--rule); border-radius: 8px; padding: 18px; display: grid; gap: 16px; }
+.controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: end; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 5px; overflow: hidden; }
+.seg button {
+  font: 500 13px var(--body); background: transparent; color: var(--ink); border: 0; padding: 7px 12px; cursor: pointer;
+  border-right: 1px solid var(--rule);
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--sheet); }
+.seg button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ctl { display: grid; gap: 5px; }
+.btn { font: 500 13px var(--body); background: var(--sheet); color: var(--ink); border: 1px solid var(--ink); border-radius: 5px; padding: 7px 12px; cursor: pointer; }
+.btn:hover { background: var(--code-bg); }
+.labgrid { display: grid; grid-template-columns: minmax(200px, 260px) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 720px) { .labgrid { grid-template-columns: 1fr; } }
+.svgbox { overflow-x: auto; }
+svg text { font-family: var(--mono); }
+.readout { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.ro { border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; display: grid; gap: 3px; }
+.ro .v { font-family: var(--mono); font-size: 22px; font-variant-numeric: tabular-nums; }
+.verdict { font-size: 14px; padding: 9px 12px; border-radius: 5px; border-left: 3px solid var(--c); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.edges { font-family: var(--mono); font-size: 12.5px; display: grid; gap: 2px; }
+
+/* Chip */
+.chipwrap { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 720px) { .chipwrap { grid-template-columns: 1fr; } }
+.jobs { display: grid; gap: 8px; }
+.job { display: grid; gap: 4px; font-size: 13px; }
+.jobbar { display: flex; height: 22px; border-radius: 3px; overflow: hidden; border: 1px solid var(--rule); }
+.jobbar span { display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 11px; color: var(--sheet); white-space: nowrap; overflow: hidden; }
+
+.chain { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--mono); font-size: 13px; }
+.chain .box { border: 1px solid var(--rule); background: var(--code-bg); padding: 5px 9px; border-radius: 4px; }
+.chain .arrow { color: var(--muted); }
+
+footer { font-size: 13px; color: var(--muted); display: grid; gap: 6px; border-top: 1px solid var(--rule); padding-top: 16px; }
+
+@media (max-width: 520px) {
+  .rail { padding-left: 0; }
+  .rail::before { display: none; }
+  .stage > .marker { position: static; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .strip a, .btn, .seg button { transition: background-color .15s, border-color .15s; }
+}
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">QLMHackaton · IBM AML HI-Small · how the code works</div>
+  <h1>From 5 million transfers to 120 circuits on IQM Garnet</h1>
+  <p>Each stage below names the script and module that does the work, what goes in, and what comes out. The circuit builder in stage 5 runs the same model as <code>src/qlmaml/circuit.py</code>, simulated in your browser.</p>
+  <div class="legend">
+    <span><i class="dot" style="background:var(--accent)"></i>classical data preparation</span>
+    <span><i class="dot" style="background:var(--payee)"></i>quantum model (simulated)</span>
+    <span><i class="dot" style="background:var(--hw)"></i>IQM Garnet hardware</span>
+  </div>
+</header>
+
+<nav class="strip" aria-label="Pipeline stages">
+  <a href="#s1" style="--c:var(--accent)"><b>1</b>Load the CSV</a>
+  <a href="#s2" style="--c:var(--accent)"><b>2</b>Graph in Neo4j</a>
+  <a href="#s3" style="--c:var(--accent)"><b>3</b>Sample subgraphs</a>
+  <a href="#s4" style="--c:var(--accent)"><b>4</b>Merge edges</a>
+  <a href="#s5" style="--c:var(--payee)"><b>5</b>Build the circuit</a>
+  <a href="#s6" style="--c:var(--payee)"><b>6</b>Train</a>
+  <a href="#s7" style="--c:var(--hw)"><b>7</b>Compile for Garnet</a>
+  <a href="#s8" style="--c:var(--hw)"><b>8</b>Run and calibrate</a>
+  <a href="#s9" style="--c:var(--hw)"><b>9</b>Score and compare</a>
+  <a href="#time" style="--c:var(--ink)"><b>+</b>Compute time</a>
+</nav>
+
+<div class="rail">
+
+<!-- 1 -->
+<section class="stage" id="s1" style="--c:var(--accent)">
+  <div class="marker">1</div>
+  <div class="head">
+    <h2>Load and split the raw transactions</h2>
+    <div class="files"><code>src/qlmaml/data.py</code><code>load_transactions</code><code>load_patterns</code></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <p><code>HI-Small_Trans.csv</code> has one row per transfer. The file has two columns both called <code>Account</code> (sender and receiver); the loader renames them. Bank ids keep their leading zeros as strings.</p>
+      <ul class="tight">
+        <li>An account is the pair (bank, account).</li>
+        <li>Rows are sorted by timestamp and get a stable <code>edge_id</code>.</li>
+        <li><code>HI-Small_Patterns.txt</code> lists 370 laundering attempts with their motif type.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <span class="eyebrow">HI-Small, measured</span>
+      <div class="tscroll"><table>
+        <tr><td>Transfers</td><td class="r">5,078,345</td></tr>
+        <tr><td>Accounts</td><td class="r">515,088</td></tr>
+        <tr><td>Account pairs (merged)</td><td class="r">1,586,998</td></tr>
+        <tr><td>Laundering transfers</td><td class="r">5,177</td></tr>
+        <tr><td>…of which in a listed attempt</td><td class="r">3,209</td></tr>
+        <tr><td>Attempts / motif types</td><td class="r">370 / 8</td></tr>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 2 -->
+<section class="stage" id="s2" style="--c:var(--accent)">
+  <div class="marker">2</div>
+  <div class="head">
+    <h2>Store the multigraph in Neo4j</h2>
+    <div class="files"><code>scripts/neo4j_load.py</code><code>src/qlmaml/graphdb.py</code></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <p>A bulk import (<code>neo4j-admin</code> in Docker) turns the CSV into a property graph, so subgraph queries take milliseconds instead of a scan over 5 M rows.</p>
+      <ul class="tight">
+        <li><code>TRANSFER</code>: one relationship per transaction. Keeps parallel edges, timestamps, currencies.</li>
+        <li><code>SENDS_TO</code>: the same edges collapsed per (sender, receiver, split). One qubit per account and one gate per pair use this view.</li>
+        <li><code>LaunderingAttempt</code> nodes link to the accounts they involve, with the motif name.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <span class="eyebrow">Graph model</span>
+      <div class="svgbox">
+      <svg viewBox="0 0 330 170" width="100%" role="img" aria-label="Neo4j graph model: Account nodes linked by TRANSFER and SENDS_TO, attached to Bank and LaunderingAttempt nodes">
+        <defs><marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+        <rect x="10" y="62" width="88" height="34" rx="17" fill="var(--sheet)" stroke="var(--accent)" stroke-width="1.5"/>
+        <text x="54" y="83" text-anchor="middle" font-size="11" fill="var(--ink)">Account</text>
+        <rect x="232" y="62" width="88" height="34" rx="17" fill="var(--sheet)" stroke="var(--accent)" stroke-width="1.5"/>
+        <text x="276" y="83" text-anchor="middle" font-size="11" fill="var(--ink)">Account</text>
+        <path d="M98,72 Q165,48 232,72" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#ar1)"/>
+        <text x="165" y="50" text-anchor="middle" font-size="10" fill="var(--muted)">TRANSFER ×n</text>
+        <path d="M98,88 Q165,112 232,88" fill="none" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#ar1)"/>
+        <text x="165" y="121" text-anchor="middle" font-size="10" fill="var(--muted)">SENDS_TO (merged)</text>
+        <rect x="18" y="128" width="72" height="28" rx="4" fill="var(--sheet)" stroke="var(--rule)"/>
+        <text x="54" y="146" text-anchor="middle" font-size="10" fill="var(--muted)">Bank</text>
+        <line x1="54" y1="96" x2="54" y2="128" stroke="var(--rule)" stroke-width="1.3"/>
+        <rect x="200" y="6" width="120" height="28" rx="4" fill="var(--sheet)" stroke="var(--payer)"/>
+        <text x="260" y="24" text-anchor="middle" font-size="10" fill="var(--payer)">LaunderingAttempt</text>
+        <line x1="276" y1="34" x2="276" y2="62" stroke="var(--payer)" stroke-width="1.3"/>
+      </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="stage" id="s3" style="--c:var(--accent)">
+  <div class="marker">3</div>
+  <div class="head">
+    <h2>Sample small labelled subgraphs</h2>
+    <div class="files"><code>scripts/build_subgraphs.py</code><code>src/qlmaml/subgraphs.py</code><code>→ data/processed/subgraphs_HI-Small_n8.parquet</code></div>
+  </div>
+  <p>The task becomes graph classification: given a directed subgraph of at most 8 accounts (8 qubits, the hardware track), does it contain a laundering attempt? The 12-account cache is the simulator track.</p>
+  <div class="cols">
+    <div class="panel">
+      <h3>Positives</h3>
+      <ul class="tight">
+        <li>The accounts of one attempt, as the <b>induced</b> subgraph over the attempt's time window, so normal transfers between those accounts are included.</li>
+        <li>Attempts with more than 8 accounts are <b>cut in time</b>: keep accounts in the order the money reaches them. 171 attempts were cut.</li>
+        <li>36 positives were dropped because no 5 matching negatives existed (small, dense shapes).</li>
+      </ul>
+      <h3>Negatives, 5 per positive</h3>
+      <ul class="tight">
+        <li>Laundering-free, from the same split, matched on account count (exact) and gate count.</li>
+        <li><b>ego</b> (1,399): an ego-net around a normal transfer.</li>
+        <li><b>pairs</b> (271): unrelated normal transfers, for sparse positives such as BIPARTITE. Without them, "disconnected" would mean "laundering".</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <span class="eyebrow">What survives, n ≤ 8</span>
+      <div class="funnel" id="funnel"></div>
+      <span class="eyebrow" style="margin-top:6px">Temporal split by subgraph start time</span>
+      <div class="tscroll"><table>
+        <tr><th>Split</th><th class="r">pos</th><th class="r">neg</th></tr>
+        <tr><td>train (first 60 %)</td><td class="r">199</td><td class="r">995</td></tr>
+        <tr><td>val (next 20 %)</td><td class="r">65</td><td class="r">325</td></tr>
+        <tr><td>test (last 20 %)</td><td class="r">70</td><td class="r">350</td></tr>
+      </table></div>
+    </div>
+  </div>
+
+  <div class="head" id="cap" style="margin-top:10px">
+    <h3 style="font-size:18px">Why the cap is 8 accounts (8 qubits)</h3>
+    <p class="muted">A choice for the hardware track, not a hard limit: the 12-account cache was trained on the simulator too. Eight is the trade-off between covering the attempts and keeping circuits clean on Garnet.</p>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <span class="eyebrow">1 · Attempts that fit uncut, of 370</span>
+      <div class="funnel">
+        <div class="frow"><div class="fbar" style="width:40.8%">k ≤ 4</div><span class="n">151 · 41 %</span></div>
+        <div class="frow"><div class="fbar hi" style="width:53%">k ≤ 8 (hardware)</div><span class="n">196 · 53 %</span></div>
+        <div class="frow"><div class="fbar" style="width:69.7%">k ≤ 12 (simulator)</div><span class="n">258 · 70 %</span></div>
+        <div class="frow"><div class="fbar" style="width:81.9%">k ≤ 16</div><span class="n">303 · 82 %</span></div>
+        <div class="frow"><div class="fbar" style="width:87.6%">k ≤ 20 (all of Garnet)</div><span class="n">324 · 88 %</span></div>
+      </div>
+      <p class="k">Larger attempts are cut in time: 171 at k = 8, 106 at k = 12. Median sizes: CYCLE 4, FAN-OUT 8, FAN-IN 9, GATHER-SCATTER and STACK 15, so those two are almost always cut.</p>
+    </div>
+    <div class="panel">
+      <span class="eyebrow">2 · Fit on Garnet, all test circuits</span>
+      <div class="tscroll"><table>
+        <tr><th></th><th class="r">n ≤ 8</th><th class="r">n ≤ 12</th></tr>
+        <tr><td>Circuits with 0 SWAPs</td><td class="r">69 %</td><td class="r">63 %</td></tr>
+        <tr><td>Median CZ count</td><td class="r">8</td><td class="r">12</td></tr>
+        <tr><td>Median CZ depth</td><td class="r">4</td><td class="r">4</td></tr>
+        <tr><td>Test PR-AUC, zx-p1 (simulator)</td><td class="r">0.695</td><td class="r">0.730</td></tr>
+      </table></div>
+      <p class="k">CZ works only between neighbouring qubits, and each SWAP costs 3 more CZ. At 8 there were enough 0-SWAP graphs for all 60 hardware test graphs and every equivariance copy. The PR-AUC rows use different test sets, and the gap is about the size of the seed-to-seed spread.</p>
+    </div>
+  </div>
+  <div class="panel">
+    <span class="eyebrow">3 · The other reasons</span>
+    <ul class="tight">
+      <li><b>Noise grows with CZ count.</b> Each merged edge costs 2 CZ. Even at 8 qubits, Garnet's scores were 0.022 from exact on average; more gates would hide the effect being measured.</li>
+      <li><b>Room for the equivariance copies.</b> Each test graph runs on 3 different qubit sets. With 19 usable qubits that day, an 8-account graph has many more distinct placements than a 12- or 16-account one.</li>
+      <li><b>Project rules.</b> CLAUDE.md asks for about 4–16 qubits, shallow circuits, and a checked chip fit.</li>
+    </ul>
+    <p class="capnote">Not a simulator limit: 8 qubits is 256 amplitudes, 12 is 4,096, all 20 of Garnet about a million, all easy on a laptop. That is also why no speed advantage is possible at this size. On the slides, the cap must be stated as subsampling.</p>
+  </div>
+</section>
+
+<!-- 4 -->
+<section class="stage" id="s4" style="--c:var(--accent)">
+  <div class="marker">4</div>
+  <div class="head">
+    <h2>Merge transfers into gate inputs</h2>
+    <div class="files"><code>src/qlmaml/circuit.py</code><code>graph_from_merged</code></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <p>Each subgraph becomes a <code>CircuitGraph</code>: a list of accounts with one feature each, and a list of directed edges in time order.</p>
+      <ul class="tight">
+        <li>Repeated transfers from the same payer to the same payee merge into one edge: total amount in USD, count, first timestamp. One gate per pair keeps the circuit shallow.</li>
+        <li>Edges are ordered by first timestamp (ties: amount, then count). The order never depends on account names.</li>
+        <li>Node feature <code>f_i = log(1 + total flow in and out)</code>. It has no direction on purpose, so the RZZ ablation gets no direction from features.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <span class="eyebrow">Gate angles (shared weights)</span>
+      <div class="tscroll"><table>
+        <tr><td>Node rotation</td><td class="mono">RY(a · f_i + b)</td></tr>
+        <tr><td>Edge angle</td><td class="mono">θ_uv = w · log(1+amount) + v · log(count)</td></tr>
+        <tr><td>Mixer</td><td class="mono">RX(c)</td></tr>
+        <tr><td>Readout</td><td class="mono">logistic(α · mean⟨Z_i⟩ + β₀)</td></tr>
+      </table></div>
+      <p class="k">p = 1 layer: 5 + 2 = 7 trainable numbers, the same for every graph size.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="stage" id="s5" style="--c:var(--payee)">
+  <div class="marker">5</div>
+  <div class="head">
+    <h2>Build the circuit: one qubit per account, one gate per edge</h2>
+    <div class="files"><code>src/qlmaml/circuit.py</code><code>build_gates</code><code>statevector_mean_z</code><code>qiskit_circuit</code></div>
+  </div>
+  <p>Pick a motif and an edge gate. The builder draws the circuit and runs it with one random set of shared weights. Each motif is compared with its twin: same undirected shape, opposite direction. With RZZ the two always score the same; with ZX they differ.</p>
+
+  <div class="panel" id="gatedefs">
+    <span class="eyebrow">Note · what a gate is</span>
+    <p>A <b>qubit</b> holds a state between |0⟩ and |1⟩. Measuring it gives 0 or 1 with some probability; ⟨Z⟩ = P(0) − P(1) summarises that as one number from +1 (always 0) to −1 (always 1). A <b>gate</b> is one operation on one or two qubits. A <b>circuit</b> is a list of gates applied in order, followed by measurement. Rotation gates take an angle; in this model each angle comes from the data times a trained weight.</p>
+    <div class="tscroll"><table>
+      <tr><th>Gate</th><th>Qubits</th><th>What it does</th><th>Where it is used</th></tr>
+      <tr><td class="mono">RY(φ)</td><td>1</td><td>Rotates the state about the Y axis; moves it between |0⟩ and |1⟩.</td><td>Node feature: loads each account's flow</td></tr>
+      <tr><td class="mono">RX(φ)</td><td>1</td><td>Rotates about the X axis.</td><td>Mixer at the end of a layer</td></tr>
+      <tr><td class="mono">Z</td><td>1</td><td>Leaves |0⟩ alone, flips the sign of |1⟩. Changes no probability by itself.</td><td>Inside ZX and ZZ: "read" the payer</td></tr>
+      <tr><td class="mono">X</td><td>1</td><td>Swaps |0⟩ and |1⟩ (a bit flip).</td><td>Inside ZX: "turn" the payee; readout calibration</td></tr>
+      <tr><td class="mono">H</td><td>1</td><td>Hadamard: swaps the roles of X and Z (H X H = Z).</td><td>Compiling ZX into ZZ</td></tr>
+      <tr><td class="mono">ZX(θ), ZZ(θ)</td><td>2</td><td>Entangling rotations, explained below.</td><td>One per merged transfer</td></tr>
+      <tr><td class="mono">CZ</td><td>2</td><td>Flips the sign of |11⟩. Garnet's only two-qubit gate, neighbours only.</td><td>Hardware: 2 per edge gate</td></tr>
+      <tr><td class="mono">PRX(φ, α)</td><td>1</td><td>Rotation about an axis in the X–Y plane. Garnet's native single-qubit gate.</td><td>Hardware: every 1-qubit gate becomes PRX</td></tr>
+    </table></div>
+    <p class="k">A two-qubit gate can <b>entangle</b> the qubits: afterwards one qubit's result depends on the other's. That is how a transfer links the payer's and payee's qubits.</p>
+  </div>
+
+  <div class="cols" id="gates">
+    <div class="panel" style="border-top:3px solid var(--payee)">
+      <span class="eyebrow">ZX gate · directed · the model</span>
+      <p class="mono" style="font-size:14px">exp(−iθ Z<sub>payer</sub> X<sub>payee</sub>) = cos θ · I − i sin θ · Z<sub>payer</sub>X<sub>payee</sub></p>
+      <p>The payer acts as a switch and the payee gets rotated. Z on the payer only reads its state (it adds a sign); X on the payee turns it.</p>
+      <div class="tscroll"><table>
+        <tr><th>Payer is</th><th>What happens to the payee</th></tr>
+        <tr><td class="mono">|0⟩</td><td>rotates about X by +2θ</td></tr>
+        <tr><td class="mono">|1⟩</td><td>rotates about X by −2θ</td></tr>
+      </table></div>
+      <ul class="tight">
+        <li><b>Direction:</b> Z<sub>u</sub>X<sub>v</sub> and X<sub>u</sub>Z<sub>v</sub> are different gates, so A → B and B → A give different circuits. Like the money, the effect goes from payer to payee.</li>
+        <li><b>Order matters:</b> for a mule B in A → B → C, B is the X end of one gate and the Z end of the next. Those two gates do not commute, so the code applies them in timestamp order.</li>
+        <li><b>Start state:</b> a payee in |+⟩ is unchanged by X and only puts a phase on the payer. The circuit starts in |0⟩ and applies RY first so the gate entangles.</li>
+      </ul>
+    </div>
+    <div class="panel" style="border-top:3px solid var(--payer)">
+      <span class="eyebrow">RZZ gate · symmetric · the ablation</span>
+      <p class="mono" style="font-size:14px">exp(−iθ Z<sub>u</sub> Z<sub>v</sub>) = diag(e<sup>−iθ</sup>, e<sup>+iθ</sup>, e<sup>+iθ</sup>, e<sup>−iθ</sup>)</p>
+      <p>Both ends only read their state. The gate adds a phase that depends on whether the two qubits agree.</p>
+      <div class="tscroll"><table>
+        <tr><th>The two qubits</th><th>Phase added</th></tr>
+        <tr><td>agree (|00⟩, |11⟩)</td><td class="mono">e<sup>−iθ</sup></td></tr>
+        <tr><td>differ (|01⟩, |10⟩)</td><td class="mono">e<sup>+iθ</sup></td></tr>
+      </table></div>
+      <ul class="tight">
+        <li><b>No direction:</b> swapping the ends gives the same gate, so the circuit sees only the undirected shape. FAN-IN = FAN-OUT and CYCLE = no-return triangle for every choice of weights.</li>
+        <li><b>No order:</b> all ZZ gates commute, so the transfer timing is lost as well.</li>
+        <li>Used by Skolik et al. [9] and Verdon et al. [8]. We keep it as the control: same graph, same 7 weights, only the edge gate differs.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="panel">
+    <span class="eyebrow">Same cost on Garnet</span>
+    <div class="chain">
+      <span class="box">ZX(θ)</span><span class="arrow">=</span>
+      <span class="box">H<sub>payee</sub> · ZZ(θ) · H<sub>payee</sub></span><span class="arrow">and</span>
+      <span class="box">ZZ(θ) → 2 CZ + PRX</span>
+    </div>
+    <p class="k">H turns X into Z (H X H = Z), so ZX is a ZZ gate with the payee's basis changed. Both cost 2 CZ per merged edge, so the ablation compares the gates at equal hardware cost. Naming: Qiskit's <code>RZZ(φ)</code> is exp(−iφ/2 ZZ), so θ here is <code>RZZ(2θ)</code>. The design decision is in <code>docs/adr/0001-directed-edge-gates.md</code>.</p>
+  </div>
+
+  <div class="lab">
+    <div class="controls">
+      <div class="ctl"><span class="eyebrow">Motif</span>
+        <div class="seg" id="motifSeg" role="group" aria-label="Motif">
+          <button id="m-fanout" data-m="fanout" aria-pressed="true">FAN-OUT</button>
+          <button id="m-fanin" data-m="fanin" aria-pressed="false">FAN-IN</button>
+          <button id="m-cycle" data-m="cycle" aria-pressed="false">CYCLE</button>
+          <button id="m-tri" data-m="tri" aria-pressed="false">No-return triangle</button>
+        </div></div>
+      <div class="ctl"><span class="eyebrow">Edge gate</span>
+        <div class="seg" id="gateSeg" role="group" aria-label="Edge gate">
+          <button id="g-zx" data-g="zx" aria-pressed="true">ZX (directed)</button>
+          <button id="g-rzz" data-g="rzz" aria-pressed="false">RZZ (symmetric)</button>
+        </div></div>
+      <button class="btn" id="reroll">New random weights</button>
+    </div>
+
+    <div class="labgrid">
+      <div class="panel" style="padding:12px">
+        <span class="eyebrow">Subgraph</span>
+        <svg id="graphSvg" viewBox="0 0 240 200" width="100%" role="img" aria-label="Selected motif as a directed graph"></svg>
+        <div class="edges" id="edgeList"></div>
+      </div>
+      <div class="panel" style="padding:12px">
+        <span class="eyebrow">Circuit, p = 1 (gates left to right in time order)</span>
+        <div class="svgbox"><svg id="circSvg" height="210" role="img" aria-label="Circuit diagram for the selected motif"></svg></div>
+        <div class="legend">
+          <span><i class="dot" style="background:var(--payer)"></i>Z on payer</span>
+          <span><i class="dot" style="background:var(--payee)"></i>X on payee</span>
+          <span><i class="dot" style="background:var(--muted)"></i>ZZ: both ends the same</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="readout">
+      <div class="ro"><span class="k" id="roLabelA">FAN-OUT</span><span class="v" id="roA">–</span><span class="k">mean⟨Z⟩ readout s</span></div>
+      <div class="ro"><span class="k" id="roLabelB">twin: FAN-IN</span><span class="v" id="roB">–</span><span class="k">mean⟨Z⟩ readout s</span></div>
+      <div class="ro"><span class="k">difference</span><span class="v" id="roD">–</span><span class="k" id="wts">weights</span></div>
+    </div>
+    <div class="verdict" id="verdict" style="--c:var(--payee)"></div>
+  </div>
+  <p class="k">Simulated exactly (state vector, 4 qubits) with amounts of 1,000 USD and count 1 on every edge, so the only difference between a motif and its twin is direction. The repo checks the same property in <code>tests/test_circuit.py</code> and on the slides with 200 random draws. Sources: Skolik et al. [9] for the equivariant construction, Egressy et al. [2] for why directed motifs need direction.</p>
+</section>
+
+<!-- 6 -->
+<section class="stage" id="s6" style="--c:var(--payee)">
+  <div class="marker">6</div>
+  <div class="head">
+    <h2>Train on the simulator</h2>
+    <div class="files"><code>scripts/train_qgnn.py</code><code>src/qlmaml/qgnn.py</code><code>→ results/HI-Small/qgnn-*.json</code></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <ul class="tight">
+        <li>Exact state-vector simulation in numpy with an adjoint gradient; a test checks it against PennyLane. No shots during training.</li>
+        <li>Weighted binary cross-entropy (positive weight = negatives / positives), Adam, early stop on validation PR-AUC.</li>
+        <li>Learning curve: 10 %, 25 %, 50 %, 100 % of the training split, 5 seeds.</li>
+        <li>Models: <code>zx-p1</code>, <code>zx-p2</code>, and <code>rzz-p1</code> as the direction ablation.</li>
+        <li>Each run is logged with <code>record_run</code>.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <span class="eyebrow">Test PR-AUC, n ≤ 8, mean of 5 seeds (random = 0.17)</span>
+      <svg id="lcSvg" viewBox="0 0 360 210" width="100%" role="img" aria-label="Learning curve: test PR-AUC against training fraction for zx-p1, rzz-p1 and XGBoost"></svg>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--payee)"></i>zx-p1</span>
+        <span><i class="dot" style="background:var(--payer)"></i>rzz-p1</span>
+        <span><i class="dot" style="background:var(--ink)"></i>XGBoost, 21 subgraph features</span>
+      </div>
+      <p class="k">ZX beats RZZ at 10–50 % of the labels; the gap closes at 100 %. XGBoost is far ahead at every size.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 7 -->
+<section class="stage" id="s7" style="--c:var(--hw)">
+  <div class="marker">7</div>
+  <div class="head">
+    <h2>Compile for the Garnet chip</h2>
+    <div class="files"><code>src/qlmaml/garnet.py</code><code>transpile_report</code><code>embedding_layouts</code><code>qubit_index_map</code></div>
+  </div>
+  <div class="panel">
+    <span class="eyebrow">One edge gate on Garnet's native gates</span>
+    <div class="chain">
+      <span class="box">exp(−iθ Z<sub>payer</sub> X<sub>payee</sub>)</span><span class="arrow">=</span>
+      <span class="box">H<sub>payee</sub> · RZZ(θ) · H<sub>payee</sub></span><span class="arrow">→</span>
+      <span class="box">2 × CZ + PRX rotations</span>
+    </div>
+    <p class="k">Same cost as RZZ: 2 CZ per merged edge. CZ works only between neighbouring qubits.</p>
+  </div>
+  <div class="chipwrap">
+    <div class="panel">
+      <span class="eyebrow">Garnet, 20 qubits, 30 couplers</span>
+      <svg id="chipSvg" viewBox="0 0 260 270" width="100%" role="img" aria-label="Garnet square lattice with an example FAN-OUT placed on QB10 and its four neighbours, and QB14 marked out of calibration"></svg>
+      <p class="k">Example: a 5-account FAN-OUT placed with 0 SWAPs (centre on QB10). QB14 was out of calibration on 2026-11-06.</p>
+    </div>
+    <div class="panel">
+      <ul class="tight">
+        <li>Each circuit is transpiled once for <code>IQMFakeGarnet</code>, optimization level 3, VF2 layout first. Graphs that fit the lattice need no SWAP.</li>
+        <li>The 60 test graphs are picked with the test class ratio (10 positive, 50 negative), 0-SWAP graphs first. All 60 needed 0 SWAPs.</li>
+        <li>Equivariance check: 20 graphs × 3 relabelled copies, each copy pinned to a different set of physical qubits.</li>
+        <li>Live Garnet drops qubits that are out of calibration and renumbers the rest. The code maps qubits by name (QB1…QB20), not index. 35 circuits touched a missing qubit or coupler and were re-transpiled for the live chip.</li>
+        <li>The 7 trained weights are bound into the circuits before transpiling. Nothing is trained on hardware.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 8 -->
+<section class="stage" id="s8" style="--c:var(--hw)">
+  <div class="marker">8</div>
+  <div class="head">
+    <h2>Run in batched jobs, with readout calibration</h2>
+    <div class="files"><code>scripts/run_garnet.py</code><code>src/qlmaml/hardware.py</code><code>select_backend(target="qpu")</code></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <span class="eyebrow">120 circuits, 2,000 shots each, max 100 per job</span>
+      <div class="jobs">
+        <div class="job"><span>Job 1: 98 circuits + 2 calibration = 100</span>
+          <div class="jobbar"><span style="flex:98;background:var(--hw)">98 model circuits</span><span style="flex:6;background:var(--payer)">cal</span></div></div>
+        <div class="job"><span>Job 2: 22 circuits + 2 calibration = 24</span>
+          <div class="jobbar" style="width:24%;min-width:110px"><span style="flex:22;background:var(--hw)">22</span><span style="flex:6;background:var(--payer)">cal</span></div></div>
+      </div>
+      <p class="k">92 s of chip time, queue 0, 0.5 credits/s. The path was tested first on <code>target="fake"</code> and the free <code>garnet:mock</code>.</p>
+    </div>
+    <div class="panel">
+      <span class="eyebrow">Two kinds of calibration</span>
+      <ul class="tight">
+        <li><b>Chip calibration (IQM).</b> Superconducting qubits drift over hours, so IQM re-tunes each qubit's frequency, the PRX and CZ pulses, and the threshold that turns the measured signal into 0 or 1. A qubit that fails is switched off and the others are renumbered: QB14 on 2026-11-06. The code maps qubits by name for this reason (stage 7).</li>
+        <li><b>Readout calibration (ours).</b> Even a well-tuned chip misreads some results. Two extra circuits in each job measure how often each qubit is misread, so the scores can be corrected.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="panel" id="calib">
+    <span class="eyebrow">Why readout calibration is needed</span>
+    <p>The model's score uses ⟨Z_i⟩, which comes straight from how often qubit i reads 1. If a qubit in |0⟩ is sometimes read as 1 (rate <span class="mono">e0</span>) and a qubit in |1⟩ is sometimes read as 0 (rate <span class="mono">e1</span>), the measured value is</p>
+    <p class="mono" style="font-size:14px">⟨Z⟩<sub>measured</sub> = (1 − e0 − e1) · ⟨Z⟩<sub>true</sub> + (e1 − e0)</p>
+    <ul class="tight">
+      <li><b>It shrinks every value toward zero</b> by the factor (1 − e0 − e1). The readout s then moves toward 0 and every score toward logistic(β₀), so positives and negatives look more alike.</li>
+      <li><b>It shifts the value</b> by (e1 − e0). Reading |1⟩ as 0 is usually more likely, because a qubit can decay to |0⟩ during the measurement.</li>
+      <li><b>Each qubit is different.</b> The same graph placed on other physical qubits gets a different error, which also breaks the equivariance check (stage 9).</li>
+      <li><b>The errors change with time.</b> That is why every job carries its own calibration circuits instead of reusing old numbers.</li>
+    </ul>
+    <p class="k">Example only, not measured: with e0 = 2 % and e1 = 5 %, a true ⟨Z⟩ of 0.50 is read as 0.93 × 0.50 + 0.03 = 0.495, and a true −0.50 as −0.435.</p>
+  </div>
+
+  <div class="cols">
+    <div class="panel">
+      <span class="eyebrow">How it is done (<code>qlmaml.garnet</code>)</span>
+      <ul class="tight">
+        <li><code>readout_calibration_circuits</code>: <code>cal_zeros</code> measures every qubit in |0⟩; <code>cal_ones</code> applies X to every qubit, then measures. 2,000 shots each, on all 19 live qubits.</li>
+        <li><code>readout_errors</code>: per physical qubit, <span class="mono">e0 = P(read 1 | prepared 0)</span> and <span class="mono">e1 = P(read 0 | prepared 1)</span>.</li>
+        <li><code>mitigated_mean_z</code>: undoes the error per qubit, <span class="mono">p = (p_raw − e0) / (1 − e0 − e1)</span>, clipped to [0, 1], then <span class="mono">s = 1 − 2 · mean(p)</span>. It uses the qubit each account was finally measured on, after any SWAPs.</li>
+        <li>Two circuits are enough because the score only needs each qubit's own ⟨Z⟩, not the full 2ⁿ × 2ⁿ error table. The price: it assumes each qubit's readout error is independent of its neighbours.</li>
+        <li>A qubit with 1 − e0 − e1 ≤ 0 carries no information (the free mock returns random bits) and is left uncorrected.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <span class="eyebrow">What it changed (mean |score − exact|)</span>
+      <div class="tscroll"><table>
+        <tr><th></th><th class="r">raw</th><th class="r">mitigated</th></tr>
+        <tr><td>IQMFakeGarnet</td><td class="r">0.014</td><td class="r">0.008</td></tr>
+        <tr class="hl"><td>Garnet</td><td class="r">0.022</td><td class="r">0.023</td></tr>
+      </table></div>
+      <ul class="tight">
+        <li>On the noise model, about half the error is readout, and the correction removes it.</li>
+        <li>On the real chip it changes nothing. Garnet's error is mostly CZ gate noise, decoherence during the circuit, and differences between qubits, which a readout correction cannot fix.</li>
+        <li>Mitigated results are kept as separate rows, never mixed with raw ones.</li>
+        <li>Gap: the per-qubit e0 and e1 are not saved in the result file, so that day's bad-readout qubits cannot be checked later.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 9 -->
+<section class="stage" id="s9" style="--c:var(--hw)">
+  <div class="marker">9</div>
+  <div class="head">
+    <h2>Score the counts and compare with simulation</h2>
+    <div class="files"><code>mean_z_from_counts</code><code>mitigated_mean_z</code><code>→ results/HI-Small/garnet_20261106-030338.json</code></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <p>Each shot gives a bitstring. <span class="mono">⟨Z_i⟩ = 1 − 2·P(qubit i reads 1)</span>, averaged over accounts, then <span class="mono">logistic(α s + β₀)</span>. The same circuits ran on every backend, so rows differ only in the device.</p>
+      <p class="k">60 test graphs, 10 positives: the confidence intervals are wide. Read the result as "no detectable loss on hardware", not "equal".</p>
+    </div>
+    <div class="panel">
+      <div class="tscroll"><table>
+        <tr><th>Mode</th><th class="r">PR-AUC</th><th class="r">|score − exact|</th><th class="r">copy spread</th></tr>
+        <tr><td>exact (state vector)</td><td class="r">0.732</td><td class="r">0</td><td class="r">0</td></tr>
+        <tr><td>Aer, shots only</td><td class="r">0.733</td><td class="r">0.004</td><td class="r">0.007</td></tr>
+        <tr><td>IQMFakeGarnet</td><td class="r">0.734</td><td class="r">0.014</td><td class="r">0.007</td></tr>
+        <tr class="hl"><td>Garnet</td><td class="r">0.713</td><td class="r">0.022</td><td class="r">0.024</td></tr>
+        <tr><td>Fake, readout-mitigated</td><td class="r">0.734</td><td class="r">0.008</td><td class="r">0.007</td></tr>
+        <tr><td>Garnet, readout-mitigated</td><td class="r">0.713</td><td class="r">0.023</td><td class="r">0.025</td></tr>
+      </table></div>
+      <p class="k">Copy spread: mean range of scores over the 3 relabelled copies. Garnet is 3.4× the shot-noise floor, so the chip's qubits are not interchangeable. Mitigation helps the fake model and not the chip: the chip's error is mostly gate noise.</p>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<section id="time" style="display:grid;gap:14px">
+  <div class="head" style="display:grid;gap:4px">
+    <span class="eyebrow">Across the pipeline</span>
+    <h2>Where the time goes: classical vs quantum compute</h2>
+    <p class="muted">At this size, every quantum step is classically simulated faster than the real chip runs it. The chip is the slowest step, and that is why it was used only for one inference run.</p>
+  </div>
+
+  <div class="panel">
+    <span class="eyebrow">Same work: score the 120 hardware circuits (2,000 shots each), log scale</span>
+    <div class="logchart">
+      <div class="lrow"><span>Exact state vector (numpy)</span><div class="ltrack"><div class="lbar" style="width:4.4%;--c:var(--payee)"><span>≈ 0.15 s</span></div></div></div>
+      <div class="lrow"><span>Aer, noiseless, shots</span><div class="ltrack"><div class="lbar" style="width:33%;--c:var(--payee)"><span>2.1 s</span></div></div></div>
+      <div class="lrow"><span>IQMFakeGarnet (transpile + run)</span><div class="ltrack"><div class="lbar" style="width:49.4%;--c:var(--payee)"><span>9.5 s</span></div></div></div>
+      <div class="lrow"><span><b>Real Garnet, 2 jobs</b></span><div class="ltrack"><div class="lbar" style="width:74.1%;--c:var(--hw)"><span>92.1 s</span></div></div></div>
+      <div class="laxis"><span></span><div><span>0.1 s</span><span>1 s</span><span>10 s</span><span>100 s</span><span>1000 s</span></div></div>
+    </div>
+    <p class="k">Garnet's 92.1 s is the recorded wall time (<code>wall_seconds</code>): upload, queue (0 that day), 248,000 shots including calibration, and download. The split between those parts is not recorded. The three simulator times were measured on this laptop on 2026-11-06 with random 8-qubit, 8-edge graphs of the model's form; the exact time is an upper bound from the gradient benchmark below.</p>
+  </div>
+
+  <div class="cols">
+    <div class="panel">
+      <span class="eyebrow">Classical side</span>
+      <div class="tscroll"><table>
+        <tr><th>Step</th><th class="r">Time</th></tr>
+        <tr><td>Build the n ≤ 8 subgraph cache from Neo4j</td><td class="r">607 s</td></tr>
+        <tr><td>XGBoost fit, ~1,200 subgraphs × 21 features</td><td class="r">≈ 0.1 s</td></tr>
+        <tr><td>Transpile 120 circuits for Garnet</td><td class="r">2.8 s</td></tr>
+      </table></div>
+      <p class="k">The cache build is a one-off; training and hardware scripts read the parquet file afterwards. XGBoost was timed on random features of the same shape with the script's settings; random features stop early, so a real run can grow more of its 500 shallow trees, which still takes seconds at most. XGBoost runs are not timed in the results files.</p>
+    </div>
+    <div class="panel">
+      <span class="eyebrow">Quantum model, trained on the simulator</span>
+      <div class="tscroll"><table>
+        <tr><th>Step</th><th class="r">Time</th></tr>
+        <tr><td>One 8-qubit circuit + gradient</td><td class="r">1.3 ms</td></tr>
+        <tr><td>One 12-qubit circuit + gradient</td><td class="r">4.0 ms</td></tr>
+        <tr><td>One epoch, n ≤ 8 (1,194 graphs)</td><td class="r">≈ 3.3 s</td></tr>
+        <tr><td>One epoch, n ≤ 12 (1,140 graphs)</td><td class="r">7–14 s</td></tr>
+        <tr><td>One training run, n ≤ 8, 100 % (6–13 epochs)</td><td class="r">19–41 s</td></tr>
+        <tr><td>One training run, n ≤ 12, 100 %</td><td class="r">64–204 s</td></tr>
+        <tr><td>Whole zx-p1 n ≤ 8 sweep (5 seeds × 4 sizes)</td><td class="r">369 s</td></tr>
+      </table></div>
+      <p class="k">Epoch and run times come from the <code>seconds</code> field of the WP3 results. The runs shared the CPU in parallel processes, so they include some waiting. Per-circuit times are the benchmark above.</p>
+    </div>
+  </div>
+
+  <div class="panel" style="border-top:3px solid var(--hw)">
+    <span class="eyebrow">What training on Garnet would cost (rough extrapolation, not run)</span>
+    <div class="tscroll"><table>
+      <tr><th>Per epoch, n ≤ 8</th><th class="r">Estimate</th></tr>
+      <tr><td>Circuits per training graph: 1 to score + 2 per parametrised gate (8 RY + 8 edge + 8 RX) for the gradient</td><td class="r">49</td></tr>
+      <tr><td>Circuits per epoch (1,194 graphs)</td><td class="r">≈ 58,500</td></tr>
+      <tr><td>Jobs (98 circuits + 2 calibration each)</td><td class="r">≈ 600</td></tr>
+      <tr><td>Chip time at 0.74 s per circuit (92.1 s / 124 circuits)</td><td class="r">≈ 12 h</td></tr>
+      <tr><td>Credits at 0.5 per second</td><td class="r">≈ 21,700</td></tr>
+      <tr class="hl"><td>Same epoch on the laptop simulator</td><td class="r">≈ 3.3 s</td></tr>
+    </table></div>
+    <p class="k">Assumptions: the parameter-shift rule for gradients (2 extra circuits per parametrised gate, since every gate's generator has eigenvalues ±1), 2,000 shots per circuit, a graph with 8 merged edges, no queue, and the per-circuit time seen on 2026-11-06. A real run would also need the queue and calibration drift handled across days. This is why the project trains on the simulator and uses Garnet only for inference.</p>
+  </div>
+
+  <p class="capnote">The comparison says nothing in favour of quantum speed at this size: 8–12 qubits fit in a laptop's memory many times over. A speed argument would need circuits too large to simulate, and this project has no evidence that such circuits would classify better.</p>
+</section>
+
+<footer>
+  <p>Numbers come from <code>reports/HI-Small/stats.json</code>, <code>reports/HI-Small/subgraphs_n8.json</code>, <code>results/figures/qgnn_learning_curve.md</code> and <code>results/hardware/wp6_garnet_summary.md</code>. Bracketed numbers refer to <code>literature/README.md</code>.</p>
+</footer>
+</div>
+
+<script>
+(function () {
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, text) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  /* ---------- Funnel (stage 3) ---------- */
+  const funnel = [
+    ["Attempts in Patterns.txt", 370],
+    ["Positives kept (n ≤ 8)", 334],
+    ["…of which cut in time", 171],
+    ["Training positives", 199],
+    ["Test positives", 70],
+    ["Test graphs run on Garnet (pos)", 10],
+  ];
+  const fEl = document.getElementById("funnel");
+  funnel.forEach(([label, n]) => {
+    const row = document.createElement("div"); row.className = "frow";
+    const bar = document.createElement("div"); bar.className = "fbar";
+    bar.style.width = Math.max(8, (n / 370) * 100) + "%"; bar.textContent = label;
+    bar.title = label;
+    const num = document.createElement("span"); num.className = "n"; num.textContent = n.toLocaleString("en-US");
+    row.append(bar, num); fEl.append(row);
+  });
+
+  /* ---------- Circuit lab (stage 5) ---------- */
+  // Motifs on 4 accounts (FAN) or 3 accounts (triangle). Edges [payer, payee, time].
+  const MOTIFS = {
+    fanout: { name: "FAN-OUT", twin: "fanin", n: 4, pos: [[120, 100], [40, 40], [200, 40], [120, 180]], edges: [[0, 1], [0, 2], [0, 3]] },
+    fanin:  { name: "FAN-IN",  twin: "fanout", n: 4, pos: [[120, 100], [40, 40], [200, 40], [120, 180]], edges: [[1, 0], [2, 0], [3, 0]] },
+    cycle:  { name: "CYCLE",   twin: "tri", n: 3, pos: [[120, 30], [205, 170], [35, 170]], edges: [[0, 1], [1, 2], [2, 0]] },
+    tri:    { name: "No-return triangle", twin: "cycle", n: 3, pos: [[120, 30], [205, 170], [35, 170]], edges: [[0, 1], [1, 2], [0, 2]] },
+  };
+  const AMOUNT = 1000, COUNT = 1;
+  let motif = "fanout", gate = "zx", W = randomWeights();
+
+  function randomWeights() {
+    const r = () => (Math.random() * 2 - 1) * Math.PI;
+    return { a: r() / 3, b: r(), w: r() / 4, v: r(), c: r() };
+  }
+
+  // State vector simulation: qubit i is bit i of the basis index.
+  function simulate(m, g, P) {
+    const n = m.n, N = 1 << n;
+    let re = new Float64Array(N), im = new Float64Array(N); re[0] = 1;
+    const flow = new Array(n).fill(0);
+    m.edges.forEach(([u, v]) => { flow[u] += AMOUNT; flow[v] += AMOUNT; });
+    const f = flow.map(x => Math.log1p(x));
+    function single(q, mat) { // mat = [[ar,ai],[br,bi],[cr,ci],[dr,di]] for [[a,b],[c,d]]
+      const bit = 1 << q;
+      for (let k = 0; k < N; k++) {
+        if (k & bit) continue;
+        const k1 = k | bit;
+        const r0 = re[k], i0 = im[k], r1 = re[k1], i1 = im[k1];
+        const [A, B, C, D] = mat;
+        re[k] = A[0] * r0 - A[1] * i0 + B[0] * r1 - B[1] * i1;
+        im[k] = A[0] * i0 + A[1] * r0 + B[0] * i1 + B[1] * r1;
+        re[k1] = C[0] * r0 - C[1] * i0 + D[0] * r1 - D[1] * i1;
+        im[k1] = C[0] * i0 + C[1] * r0 + D[0] * i1 + D[1] * r1;
+      }
+    }
+    const RY = t => { const c = Math.cos(t / 2), s = Math.sin(t / 2); return [[c, 0], [-s, 0], [s, 0], [c, 0]]; };
+    const RX = t => { const c = Math.cos(t / 2), s = Math.sin(t / 2); return [[c, 0], [0, -s], [0, -s], [c, 0]]; };
+    for (let i = 0; i < n; i++) single(i, RY(P.a * f[i] + P.b));
+    const theta = P.w * Math.log1p(AMOUNT) + P.v * Math.log(COUNT);
+    const c = Math.cos(theta), s = Math.sin(theta);
+    m.edges.forEach(([u, v]) => {
+      if (g === "rzz") { // exp(-i θ Z_u Z_v): phase e^{-iθ z_u z_v}
+        for (let k = 0; k < N; k++) {
+          const z = ((k >> u) & 1 ? -1 : 1) * ((k >> v) & 1 ? -1 : 1);
+          const pr = c, pi = -s * z, r = re[k], i = im[k];
+          re[k] = r * pr - i * pi; im[k] = r * pi + i * pr;
+        }
+      } else { // exp(-i θ Z_u X_v) = cos θ I − i sin θ Z_u X_v
+        const nr = new Float64Array(N), ni = new Float64Array(N);
+        for (let k = 0; k < N; k++) {
+          const k2 = k ^ (1 << v);
+          const z = (k >> u) & 1 ? -1 : 1;  // bit u is the same in k and k2
+          // −i s z (re + i im) = s z im − i s z re
+          nr[k] = c * re[k] + s * z * im[k2];
+          ni[k] = c * im[k] - s * z * re[k2];
+        }
+        re = nr; im = ni;
+      }
+    });
+    for (let i = 0; i < n; i++) single(i, RX(P.c));
+    let tot = 0;
+    for (let i = 0; i < n; i++) {
+      let z = 0;
+      for (let k = 0; k < N; k++) z += (re[k] * re[k] + im[k] * im[k]) * ((k >> i) & 1 ? -1 : 1);
+      tot += z;
+    }
+    return tot / n;
+  }
+
+  function drawGraph() {
+    const m = MOTIFS[motif], svg = document.getElementById("graphSvg");
+    svg.replaceChildren();
+    const defs = el("defs", {});
+    const mk = el("marker", { id: "garr", viewBox: "0 0 10 10", refX: "10", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto" });
+    mk.append(el("path", { d: "M0,0 L10,5 L0,10 z", fill: css("--ink") }));
+    defs.append(mk); svg.append(defs);
+    const R = 17;
+    m.edges.forEach(([u, v], t) => {
+      const [x1, y1] = m.pos[u], [x2, y2] = m.pos[v];
+      const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy);
+      const sx = x1 + dx / L * R, sy = y1 + dy / L * R, ex = x2 - dx / L * (R + 2), ey = y2 - dy / L * (R + 2);
+      svg.append(el("line", { x1: sx, y1: sy, x2: ex, y2: ey, stroke: css("--ink"), "stroke-width": 1.6, "marker-end": "url(#garr)" }));
+      const mx = (x1 + x2) / 2 - dy / L * 11, my = (y1 + y2) / 2 + dx / L * 11;
+      svg.append(el("text", { x: mx, y: my + 4, "text-anchor": "middle", "font-size": 11, fill: css("--muted") }, "t" + (t + 1)));
+    });
+    m.pos.forEach(([x, y], i) => {
+      svg.append(el("circle", { cx: x, cy: y, r: R, fill: css("--sheet"), stroke: css("--payee"), "stroke-width": 1.6 }));
+      svg.append(el("text", { x, y: y + 4, "text-anchor": "middle", "font-size": 12, fill: css("--ink") }, "q" + i));
+    });
+    document.getElementById("edgeList").innerHTML = m.edges.map(([u, v], t) =>
+      `<span>t${t + 1}: q${u} → q${v} · ${AMOUNT.toLocaleString("en-US")} USD × ${COUNT}</span>`).join("");
+  }
+
+  function drawCircuit() {
+    const m = MOTIFS[motif], svg = document.getElementById("circSvg");
+    svg.replaceChildren();
+    const n = m.n, top = 26, gap = 42, left = 34;
+    const colW = 52, cols = 1 + m.edges.length + 1 + 1;
+    const width = left + cols * colW + 20;
+    svg.setAttribute("viewBox", `0 0 ${width} ${top + (n - 1) * gap + 30}`);
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", top + (n - 1) * gap + 30);
+    const y = i => top + i * gap;
+    for (let i = 0; i < n; i++) {
+      svg.append(el("text", { x: 4, y: y(i) + 4, "font-size": 11, fill: css("--muted") }, "q" + i));
+      svg.append(el("line", { x1: left - 4, y1: y(i), x2: width - 10, y2: y(i), stroke: css("--rule"), "stroke-width": 1.4 }));
+    }
+    const box = (cx, cy, label, stroke, fill) => {
+      svg.append(el("rect", { x: cx - 17, y: cy - 12, width: 34, height: 24, rx: 3, fill: fill || css("--sheet"), stroke, "stroke-width": 1.4 }));
+      svg.append(el("text", { x: cx, y: cy + 4, "text-anchor": "middle", "font-size": 10.5, fill: stroke === css("--rule") ? css("--ink") : stroke }, label));
+    };
+    let col = 0; const cx = c => left + c * colW + colW / 2;
+    svg.append(el("text", { x: cx(0), y: 12, "text-anchor": "middle", "font-size": 9.5, fill: css("--muted") }, "features"));
+    for (let i = 0; i < n; i++) box(cx(0), y(i), "RY", css("--ink"));
+    m.edges.forEach(([u, v], t) => {
+      col = 1 + t; const x = cx(col);
+      svg.append(el("text", { x, y: 12, "text-anchor": "middle", "font-size": 9.5, fill: css("--muted") }, "t" + (t + 1)));
+      svg.append(el("line", { x1: x, y1: y(u), x2: x, y2: y(v), stroke: css("--muted"), "stroke-width": 1.4 }));
+      if (gate === "zx") { box(x, y(u), "Z", css("--payer")); box(x, y(v), "X", css("--payee")); }
+      else { box(x, y(u), "Z", css("--muted")); box(x, y(v), "Z", css("--muted")); }
+    });
+    col = 1 + m.edges.length;
+    svg.append(el("text", { x: cx(col), y: 12, "text-anchor": "middle", "font-size": 9.5, fill: css("--muted") }, "mixer"));
+    for (let i = 0; i < n; i++) box(cx(col), y(i), "RX", css("--ink"));
+    col++;
+    svg.append(el("text", { x: cx(col), y: 12, "text-anchor": "middle", "font-size": 9.5, fill: css("--muted") }, "⟨Z⟩"));
+    for (let i = 0; i < n; i++) {
+      const x = cx(col), yy = y(i);
+      svg.append(el("rect", { x: x - 15, y: yy - 12, width: 30, height: 24, rx: 3, fill: css("--code-bg"), stroke: css("--ink"), "stroke-width": 1.2 }));
+      svg.append(el("path", { d: `M${x - 9},${yy + 6} A9,9 0 0 1 ${x + 9},${yy + 6}`, fill: "none", stroke: css("--ink"), "stroke-width": 1.2 }));
+      svg.append(el("line", { x1: x, y1: yy + 6, x2: x + 6, y2: yy - 6, stroke: css("--ink"), "stroke-width": 1.2 }));
+    }
+  }
+
+  function readout() {
+    const m = MOTIFS[motif], tw = MOTIFS[m.twin];
+    const a = simulate(m, gate, W), b = simulate(tw, gate, W), d = Math.abs(a - b);
+    document.getElementById("roLabelA").textContent = m.name;
+    document.getElementById("roLabelB").textContent = "twin: " + tw.name;
+    document.getElementById("roA").textContent = a.toFixed(4);
+    document.getElementById("roB").textContent = b.toFixed(4);
+    document.getElementById("roD").textContent = d < 5e-10 ? "0.0000" : d.toFixed(4);
+    document.getElementById("wts").textContent =
+      `a=${W.a.toFixed(2)} b=${W.b.toFixed(2)} w=${W.w.toFixed(2)} c=${W.c.toFixed(2)}`;
+    const v = document.getElementById("verdict");
+    if (gate === "rzz") {
+      v.style.setProperty("--c", css("--payer"));
+      v.textContent = `RZZ cannot tell ${m.name} from ${tw.name}: ZZ is the same gate whichever end pays, so the circuit only sees the undirected shape. No weights can change that.`;
+    } else if (d < 1e-6) {
+      v.style.setProperty("--c", css("--muted"));
+      v.textContent = "These weights happen to give almost the same score. Draw new weights: for most draws ZX separates the two.";
+    } else {
+      v.style.setProperty("--c", css("--payee"));
+      v.textContent = `ZX scores ${m.name} and ${tw.name} differently: Z sits on the payer and X on the payee, so reversing the money flow changes the circuit.`;
+    }
+  }
+
+  function renderLab() { drawGraph(); drawCircuit(); readout(); }
+
+  document.getElementById("motifSeg").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    motif = b.dataset.m;
+    document.querySelectorAll("#motifSeg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    renderLab();
+  });
+  document.getElementById("gateSeg").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    gate = b.dataset.g;
+    document.querySelectorAll("#gateSeg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    renderLab();
+  });
+  document.getElementById("reroll").addEventListener("click", () => { W = randomWeights(); readout(); });
+
+  /* ---------- Learning curve (stage 6) ---------- */
+  function drawLC() {
+    const svg = document.getElementById("lcSvg"); svg.replaceChildren();
+    const fr = [0.10, 0.25, 0.50, 1.00];
+    const series = [
+      ["--payee", [0.649, 0.709, 0.743, 0.695]],
+      ["--payer", [0.571, 0.594, 0.633, 0.692]],
+      ["--ink", [0.889, 0.936, 0.956, 0.964]],
+    ];
+    const L = 44, R = 344, T = 12, B = 178;
+    const xs = i => L + i * (R - L) / 3;
+    const ys = v => B - (v - 0.5) / 0.5 * (B - T);
+    [0.5, 0.6, 0.7, 0.8, 0.9, 1.0].forEach(t => {
+      svg.append(el("line", { x1: L, x2: R, y1: ys(t), y2: ys(t), stroke: css("--rule"), "stroke-width": 1 }));
+      svg.append(el("text", { x: L - 6, y: ys(t) + 4, "text-anchor": "end", "font-size": 10, fill: css("--muted") }, t.toFixed(1)));
+    });
+    fr.forEach((f, i) => {
+      svg.append(el("text", { x: xs(i), y: B + 16, "text-anchor": "middle", "font-size": 10, fill: css("--muted") }, Math.round(f * 100) + " %"));
+    });
+    svg.append(el("text", { x: (L + R) / 2, y: B + 30, "text-anchor": "middle", "font-size": 10, fill: css("--muted") }, "share of training split used"));
+    series.forEach(([tok, vals]) => {
+      const col = css(tok);
+      svg.append(el("polyline", { points: vals.map((v, i) => `${xs(i)},${ys(v)}`).join(" "), fill: "none", stroke: col, "stroke-width": 2 }));
+      vals.forEach((v, i) => svg.append(el("circle", { cx: xs(i), cy: ys(v), r: 3.5, fill: col })));
+    });
+  }
+
+  /* ---------- Garnet chip (stage 7) ---------- */
+  function drawChip() {
+    const svg = document.getElementById("chipSvg"); svg.replaceChildren();
+    const P = { 1: [1, 0], 2: [2, 0], 3: [0, 1], 4: [1, 1], 5: [2, 1], 6: [3, 1], 7: [4, 1],
+      8: [0, 2], 9: [1, 2], 10: [2, 2], 11: [3, 2], 12: [4, 2],
+      13: [0, 3], 14: [1, 3], 15: [2, 3], 16: [3, 3], 17: [4, 3], 18: [1, 4], 19: [2, 4], 20: [3, 4] };
+    const E = [[1,2],[1,4],[2,5],[3,4],[3,8],[4,5],[4,9],[5,6],[5,10],[6,7],[6,11],[7,12],[8,9],[8,13],[9,10],[9,14],
+      [10,11],[10,15],[11,12],[11,16],[12,17],[13,14],[14,15],[14,18],[15,16],[15,19],[16,17],[16,20],[18,19],[19,20]];
+    const X = q => 30 + P[q][0] * 50, Y = q => 25 + P[q][1] * 52;
+    const used = new Set([10, 5, 9, 11, 15]);
+    const usedE = new Set(["5-10", "9-10", "10-11", "10-15"]);
+    E.forEach(([a, b]) => {
+      const on = usedE.has(a + "-" + b), off = a === 14 || b === 14;
+      svg.append(el("line", { x1: X(a), y1: Y(a), x2: X(b), y2: Y(b),
+        stroke: on ? css("--hw") : css("--rule"), "stroke-width": on ? 3 : 2, "stroke-dasharray": off ? "3 3" : "0" }));
+    });
+    Object.keys(P).forEach(k => {
+      const q = +k, isUsed = used.has(q), off = q === 14;
+      svg.append(el("circle", { cx: X(q), cy: Y(q), r: 15,
+        fill: isUsed ? css("--hw") : css("--sheet"),
+        stroke: off ? css("--warn") : (isUsed ? css("--hw") : css("--muted")), "stroke-width": 1.5, "stroke-dasharray": off ? "3 2" : "0" }));
+      svg.append(el("text", { x: X(q), y: Y(q) + 3.5, "text-anchor": "middle", "font-size": 9.5,
+        fill: isUsed ? css("--sheet") : (off ? css("--warn") : css("--ink")) }, "QB" + q));
+    });
+  }
+
+  function renderAll() { renderLab(); drawLC(); drawChip(); }
+  renderAll();
+  // Redraw SVGs when the colour theme changes, since colours are read from the tokens.
+  try {
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
+    new MutationObserver(renderAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  } catch (e) {}
+})();
+</script>
