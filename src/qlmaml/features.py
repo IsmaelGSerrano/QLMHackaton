@@ -15,6 +15,8 @@ All functions take the clean polars DataFrame produced by `qlmaml.data.load_tran
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import numpy as np
 import polars as pl
 
@@ -138,3 +140,73 @@ def build_features(
 def feature_matrix(feats: pl.DataFrame) -> tuple[np.ndarray, list[str]]:
     cols = [c for c in feats.columns if c != "edge_id"]
     return feats.select(cols).to_numpy().astype(np.float32), cols
+
+
+# --------------------------------------------------------------------------- #
+# Per-subgraph features (prototype plan, WP4)                                 #
+# --------------------------------------------------------------------------- #
+
+
+def subgraph_features(row: Mapping) -> dict[str, float]:
+    """Hand-made graph features of one subgraph-cache row, for the classical WP4 baseline.
+
+    `row` is one row of `data/processed/subgraphs_<name>_n<k>.parquet` (`qlmaml.subgraphs.write_cache`):
+    `n_qubits` accounts and merged `edges` {u, v, first_ts, total_usd, n_tx}. It sees exactly what
+    the circuit sees, so the comparison with the quantum model is on the same input.
+    Self-transfers (u == v) count in `n_tx` and the amounts, not in the degrees or `n_edges`.
+    """
+    n = int(row["n_qubits"])
+    edges = list(row["edges"])
+    pairs = {(int(e["u"]), int(e["v"])) for e in edges if e["u"] != e["v"]}
+    out_deg = np.bincount([u for u, _ in pairs], minlength=n)
+    in_deg = np.bincount([v for _, v in pairs], minlength=n)
+    reciprocated = sum((v, u) in pairs for u, v in pairs)
+    succ: dict[int, set[int]] = {}
+    for u, v in pairs:
+        succ.setdefault(u, set()).add(v)
+    # Directed 3-cycles u -> v -> w -> u; each is found once from each of its 3 accounts.
+    cycles3 = sum((w, u) in pairs for u, v in pairs for w in succ.get(v, ()) if w not in (u, v)) // 3
+    gate_edges = [e for e in edges if e["u"] != e["v"]]
+    usd = np.array([e["total_usd"] for e in gate_edges], dtype=float)
+    tx = np.array([e["n_tx"] for e in gate_edges], dtype=float)
+    times = [e["first_ts"] for e in edges]
+    span_h = (max(times) - min(times)).total_seconds() / 3600 if times else 0.0
+    log_usd = np.log1p(usd)
+    return {
+        "n_nodes": n,
+        "n_edges": len(pairs),
+        "n_tx": sum(int(e["n_tx"]) for e in edges),
+        "out_deg_max": int(out_deg.max(initial=0)),
+        "in_deg_max": int(in_deg.max(initial=0)),
+        "n_sources": int(((out_deg > 0) & (in_deg == 0)).sum()),
+        "n_sinks": int(((in_deg > 0) & (out_deg == 0)).sum()),
+        "reciprocity": reciprocated / len(pairs) if pairs else 0.0,
+        "n_2cycles": reciprocated // 2,
+        "n_3cycles": cycles3,
+        "n_self_tx": sum(int(e["n_tx"]) for e in edges if e["u"] == e["v"]),
+        "out_deg_std": float(out_deg.std()) if n else 0.0,
+        "in_deg_std": float(in_deg.std()) if n else 0.0,
+        "usd_log_total": float(np.log1p(usd.sum())),
+        "usd_log_mean": float(log_usd.mean()) if usd.size else 0.0,
+        "usd_log_std": float(log_usd.std()) if usd.size else 0.0,
+        "usd_log_max": float(log_usd.max(initial=0.0)),
+        "usd_log_min": float(log_usd.min()) if usd.size else 0.0,
+        "tx_per_edge_mean": float(tx.mean()) if tx.size else 0.0,
+        "tx_per_edge_max": float(tx.max(initial=0.0)),
+        "time_span_h": span_h,
+    }
+
+
+def subgraph_feature_matrix(cache: pl.DataFrame, exclude: tuple[str, ...] = ()) -> tuple[np.ndarray, list[str]]:
+    """`subgraph_features` for every row of a subgraph-cache frame: (X, column names), rows in frame order.
+
+    `exclude` drops features by name, e.g. `("time_span_h",)`: positive windows last as long as the
+    attempt and ego-net negatives one day, so the time span can be a shortcut (`qlmaml.subgraphs`).
+    """
+    all_names = list(subgraph_features({"n_qubits": 0, "edges": []}))
+    unknown = set(exclude) - set(all_names)
+    if unknown:
+        raise KeyError(f"unknown features to exclude: {sorted(unknown)}")
+    names = [k for k in all_names if k not in exclude]
+    rows = [subgraph_features(r) for r in cache.select("n_qubits", "edges").iter_rows(named=True)]
+    return np.array([[r[k] for k in names] for r in rows], dtype=np.float32).reshape(len(rows), len(names)), names

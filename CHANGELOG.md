@@ -9,6 +9,13 @@
 - Add `qlmaml.qgnn`: `train`, `predict`, `graph_from_cache_row` and `nested_subsamples` (stratified, nested, seeded subsets that WP4 reuses)
 - Add `qlmaml.circuit.statevector_mean_z`: exact numpy statevector with an adjoint gradient, about 10x faster than PennyLane for training, checked against PennyLane value and gradient
 - Add `qlmaml.circuit.graph_from_merged` for edges that are already merged (the parquet cache)
+- Add `qlmaml.features.subgraph_features` and `subgraph_feature_matrix`: directed graph features per cached subgraph (issue #8)
+- Add `scripts/train_xgb_subgraph.py`: XGBoost on the WP1 subgraph cache with the WP3 learning curve, recorded as `xgb-subgraph-n<k>`
+- Add WP4 HI-Small runs for n = 8 and n = 12, with and without the time-span feature
+- Move `recall_by_pattern` to `qlmaml.metrics` and the `--fake` cache builder to `qlmaml.subgraphs.build_fake_cache`, shared by WP3 and WP4
+- Add `--seeds` to `scripts/train_xgb_subgraph.py`: mean and std over seeds, bootstrap 95 % CI of test PR-AUC, paired bootstrap difference against WP3 `qgnn-zx-p1` (seed k against seed k)
+- Move the per-seed learning-curve summary to `qlmaml.metrics.seed_curve_summary` and `paired_curves`, shared by WP3 and WP4
+- Draw `xgb-subgraph` in `scripts/plot_learning_curve.py` as the classical reference line
 
 ## [0.0.1] — 2026-11-06
 

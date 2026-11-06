@@ -1,0 +1,465 @@
+{
+  "run_id": "xgb-subgraph-n12_20261106-004306",
+  "dataset": "HI-Small",
+  "model": "xgb-subgraph-n12",
+  "note": "WP4 without time_span_h (window-length shortcut check)",
+  "date": "2026-11-06T00:43:06+00:00",
+  "commit": "b4f767f+",
+  "headline_fraction": 1.0,
+  "val": {
+    "n": 378,
+    "positives": 63,
+    "pr_auc": 0.9978044707120364,
+    "roc_auc": 0.999596875787352,
+    "f1_at_threshold": 0.976,
+    "threshold": 0.810350239276886,
+    "f1_best_on_this_set": 0.9841269841269841,
+    "recall_at_fpr_0.1pct": 0.9523809523809523,
+    "recall_at_fpr_1pct": 0.9841269841269841
+  },
+  "test": {
+    "n": 408,
+    "positives": 68,
+    "pr_auc": 0.9658552336255615,
+    "roc_auc": 0.9917820069204152,
+    "f1_at_threshold": 0.9104477611940298,
+    "threshold": 0.810350239276886,
+    "f1_best_on_this_set": 0.916030534351145,
+    "recall_at_fpr_0.1pct": 0.75,
+    "recall_at_fpr_1pct": 0.8823529411764706
+  },
+  "test_recall_by_pattern": {
+    "BIPARTITE": {
+      "n": 15,
+      "recall": 0.8
+    },
+    "CYCLE": {
+      "n": 6,
+      "recall": 1.0
+    },
+    "FAN-IN": {
+      "n": 8,
+      "recall": 0.875
+    },
+    "FAN-OUT": {
+      "n": 8,
+      "recall": 1.0
+    },
+    "GATHER-SCATTER": {
+      "n": 11,
+      "recall": 0.8181818181818182
+    },
+    "RANDOM": {
+      "n": 9,
+      "recall": 0.8888888888888888
+    },
+    "SCATTER-GATHER": {
+      "n": 5,
+      "recall": 1.0
+    },
+    "STACK": {
+      "n": 6,
+      "recall": 1.0
+    }
+  },
+  "features": [
+    "n_nodes",
+    "n_edges",
+    "n_tx",
+    "out_deg_max",
+    "in_deg_max",
+    "n_sources",
+    "n_sinks",
+    "reciprocity",
+    "n_2cycles",
+    "n_3cycles",
+    "n_self_tx",
+    "out_deg_std",
+    "in_deg_std",
+    "usd_log_total",
+    "usd_log_mean",
+    "usd_log_std",
+    "usd_log_max",
+    "usd_log_min",
+    "tx_per_edge_mean",
+    "tx_per_edge_max"
+  ],
+  "feature_importance": [
+    [
+      "tx_per_edge_mean",
+      0.1943754106760025
+    ],
+    [
+      "reciprocity",
+      0.1311066895723343
+    ],
+    [
+      "n_sinks",
+      0.09865881502628326
+    ],
+    [
+      "usd_log_min",
+      0.0887913927435875
+    ],
+    [
+      "n_edges",
+      0.06539162248373032
+    ],
+    [
+      "out_deg_std",
+      0.06472212821245193
+    ],
+    [
+      "usd_log_std",
+      0.05933677777647972
+    ],
+    [
+      "tx_per_edge_max",
+      0.04359469562768936
+    ],
+    [
+      "usd_log_mean",
+      0.03599702566862106
+    ],
+    [
+      "n_nodes",
+      0.031287696212530136
+    ],
+    [
+      "usd_log_max",
+      0.030807804316282272
+    ],
+    [
+      "n_sources",
+      0.028550492599606514
+    ],
+    [
+      "n_self_tx",
+      0.02554181031882763
+    ],
+    [
+      "n_tx",
+      0.02239018678665161
+    ],
+    [
+      "in_deg_max",
+      0.019244171679019928
+    ],
+    [
+      "in_deg_std",
+      0.017956621944904327
+    ],
+    [
+      "usd_log_total",
+      0.017006980255246162
+    ],
+    [
+      "n_2cycles",
+      0.014038721099495888
+    ],
+    [
+      "out_deg_max",
+      0.011200998909771442
+    ],
+    [
+      "n_3cycles",
+      0.0
+    ]
+  ],
+  "learning_curve": [
+    {
+      "fraction": 0.1,
+      "n_train": 114,
+      "train_positives": 19,
+      "best_iteration": 258,
+      "val": {
+        "n": 378,
+        "positives": 63,
+        "pr_auc": 0.9888384478084538,
+        "roc_auc": 0.9980599647266315,
+        "f1_at_threshold": 0.9612403100775194,
+        "threshold": 0.17161187529563904,
+        "f1_best_on_this_set": 0.9692307692307692,
+        "recall_at_fpr_0.1pct": 0.746031746031746,
+        "recall_at_fpr_1pct": 0.9365079365079365
+      },
+      "test": {
+        "n": 408,
+        "positives": 68,
+        "pr_auc": 0.9469181054477815,
+        "roc_auc": 0.9826773356401384,
+        "f1_at_threshold": 0.8671328671328671,
+        "threshold": 0.17161187529563904,
+        "f1_best_on_this_set": 0.888888888888889,
+        "recall_at_fpr_0.1pct": 0.6617647058823529,
+        "recall_at_fpr_1pct": 0.8235294117647058
+      },
+      "test_recall_by_pattern": {
+        "BIPARTITE": {
+          "n": 15,
+          "recall": 0.8
+        },
+        "CYCLE": {
+          "n": 6,
+          "recall": 1.0
+        },
+        "FAN-IN": {
+          "n": 8,
+          "recall": 0.875
+        },
+        "FAN-OUT": {
+          "n": 8,
+          "recall": 1.0
+        },
+        "GATHER-SCATTER": {
+          "n": 11,
+          "recall": 0.9090909090909091
+        },
+        "RANDOM": {
+          "n": 9,
+          "recall": 0.8888888888888888
+        },
+        "SCATTER-GATHER": {
+          "n": 5,
+          "recall": 1.0
+        },
+        "STACK": {
+          "n": 6,
+          "recall": 1.0
+        }
+      }
+    },
+    {
+      "fraction": 0.25,
+      "n_train": 286,
+      "train_positives": 48,
+      "best_iteration": 119,
+      "val": {
+        "n": 378,
+        "positives": 63,
+        "pr_auc": 0.9890536228249993,
+        "roc_auc": 0.9976316452506929,
+        "f1_at_threshold": 0.943089430894309,
+        "threshold": 0.7429644465446472,
+        "f1_best_on_this_set": 0.9516129032258064,
+        "recall_at_fpr_0.1pct": 0.8571428571428571,
+        "recall_at_fpr_1pct": 0.9365079365079365
+      },
+      "test": {
+        "n": 408,
+        "positives": 68,
+        "pr_auc": 0.9346862107857955,
+        "roc_auc": 0.9786548442906574,
+        "f1_at_threshold": 0.8549618320610687,
+        "threshold": 0.7429644465446472,
+        "f1_best_on_this_set": 0.875,
+        "recall_at_fpr_0.1pct": 0.6323529411764706,
+        "recall_at_fpr_1pct": 0.7794117647058824
+      },
+      "test_recall_by_pattern": {
+        "BIPARTITE": {
+          "n": 15,
+          "recall": 0.5333333333333333
+        },
+        "CYCLE": {
+          "n": 6,
+          "recall": 1.0
+        },
+        "FAN-IN": {
+          "n": 8,
+          "recall": 0.75
+        },
+        "FAN-OUT": {
+          "n": 8,
+          "recall": 0.875
+        },
+        "GATHER-SCATTER": {
+          "n": 11,
+          "recall": 1.0
+        },
+        "RANDOM": {
+          "n": 9,
+          "recall": 0.7777777777777778
+        },
+        "SCATTER-GATHER": {
+          "n": 5,
+          "recall": 1.0
+        },
+        "STACK": {
+          "n": 6,
+          "recall": 1.0
+        }
+      }
+    },
+    {
+      "fraction": 0.5,
+      "n_train": 570,
+      "train_positives": 95,
+      "best_iteration": 45,
+      "val": {
+        "n": 378,
+        "positives": 63,
+        "pr_auc": 0.9958659063325479,
+        "roc_auc": 0.9992693373645755,
+        "f1_at_threshold": 0.9421487603305785,
+        "threshold": 0.6651887893676758,
+        "f1_best_on_this_set": 0.9763779527559054,
+        "recall_at_fpr_0.1pct": 0.8888888888888888,
+        "recall_at_fpr_1pct": 0.9841269841269841
+      },
+      "test": {
+        "n": 408,
+        "positives": 68,
+        "pr_auc": 0.9472516784646215,
+        "roc_auc": 0.9816176470588235,
+        "f1_at_threshold": 0.8709677419354839,
+        "threshold": 0.6651887893676758,
+        "f1_best_on_this_set": 0.9197080291970804,
+        "recall_at_fpr_0.1pct": 0.6911764705882353,
+        "recall_at_fpr_1pct": 0.7941176470588235
+      },
+      "test_recall_by_pattern": {
+        "BIPARTITE": {
+          "n": 15,
+          "recall": 0.4666666666666667
+        },
+        "CYCLE": {
+          "n": 6,
+          "recall": 1.0
+        },
+        "FAN-IN": {
+          "n": 8,
+          "recall": 0.875
+        },
+        "FAN-OUT": {
+          "n": 8,
+          "recall": 0.875
+        },
+        "GATHER-SCATTER": {
+          "n": 11,
+          "recall": 1.0
+        },
+        "RANDOM": {
+          "n": 9,
+          "recall": 0.5555555555555556
+        },
+        "SCATTER-GATHER": {
+          "n": 5,
+          "recall": 1.0
+        },
+        "STACK": {
+          "n": 6,
+          "recall": 1.0
+        }
+      }
+    },
+    {
+      "fraction": 1.0,
+      "n_train": 1140,
+      "train_positives": 190,
+      "best_iteration": 141,
+      "val": {
+        "n": 378,
+        "positives": 63,
+        "pr_auc": 0.9978044707120364,
+        "roc_auc": 0.999596875787352,
+        "f1_at_threshold": 0.976,
+        "threshold": 0.810350239276886,
+        "f1_best_on_this_set": 0.9841269841269841,
+        "recall_at_fpr_0.1pct": 0.9523809523809523,
+        "recall_at_fpr_1pct": 0.9841269841269841
+      },
+      "test": {
+        "n": 408,
+        "positives": 68,
+        "pr_auc": 0.9658552336255615,
+        "roc_auc": 0.9917820069204152,
+        "f1_at_threshold": 0.9104477611940298,
+        "threshold": 0.810350239276886,
+        "f1_best_on_this_set": 0.916030534351145,
+        "recall_at_fpr_0.1pct": 0.75,
+        "recall_at_fpr_1pct": 0.8823529411764706
+      },
+      "test_recall_by_pattern": {
+        "BIPARTITE": {
+          "n": 15,
+          "recall": 0.8
+        },
+        "CYCLE": {
+          "n": 6,
+          "recall": 1.0
+        },
+        "FAN-IN": {
+          "n": 8,
+          "recall": 0.875
+        },
+        "FAN-OUT": {
+          "n": 8,
+          "recall": 1.0
+        },
+        "GATHER-SCATTER": {
+          "n": 11,
+          "recall": 0.8181818181818182
+        },
+        "RANDOM": {
+          "n": 9,
+          "recall": 0.8888888888888888
+        },
+        "SCATTER-GATHER": {
+          "n": 5,
+          "recall": 1.0
+        },
+        "STACK": {
+          "n": 6,
+          "recall": 1.0
+        }
+      }
+    }
+  ],
+  "data": {
+    "cache": "subgraphs_HI-Small_n12.parquet",
+    "max_nodes": 12,
+    "splits": {
+      "train": {
+        "n": 1140,
+        "pos": 190
+      },
+      "val": {
+        "n": 378,
+        "pos": 63
+      },
+      "test": {
+        "n": 408,
+        "pos": 68
+      }
+    }
+  },
+  "config": {
+    "fractions": [
+      0.1,
+      0.25,
+      0.5,
+      1.0
+    ],
+    "exclude": [
+      "time_span_h"
+    ],
+    "seed": 0,
+    "params": {
+      "objective": "binary:logistic",
+      "colsample_bytree": 0.8,
+      "early_stopping_rounds": 50,
+      "enable_categorical": true,
+      "eval_metric": "aucpr",
+      "learning_rate": 0.05,
+      "max_depth": 3,
+      "min_child_weight": 1,
+      "missing": NaN,
+      "n_estimators": 500,
+      "random_state": 0,
+      "scale_pos_weight": 5.0,
+      "subsample": 0.8,
+      "tree_method": "hist"
+    }
+  }
+}

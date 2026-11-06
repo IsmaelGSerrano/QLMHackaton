@@ -432,3 +432,19 @@ def usd_rates_from_transfers(t: pl.DataFrame) -> dict[str, float]:
     out = dict(rates.group_by("currency").agg(pl.col("rate").median()).iter_rows())
     out[usd] = 1.0
     return out
+
+
+def build_fake_cache(out_dir: str | Path, seed: int = 0, max_nodes: int = 6) -> Path:
+    """Synthetic subgraph cache `subgraphs_FAKE-Small_n<max_nodes>.parquet` through this pipeline, no Neo4j.
+
+    For the `--fake` smoke tests of the training scripts (WP3, WP4). Never report its numbers.
+    """
+    from qlmaml.fake_data import write_fake_transactions
+
+    out_dir = Path(out_dir)
+    trans = write_fake_transactions(out_dir / "FAKE-Small_Trans.csv", n_accounts=300, n_normal=6_000, n_motifs=30,
+                                    patterns_path=out_dir / "FAKE-Small_Patterns.txt", seed=seed)
+    src = FrameGraph.from_files(trans, out_dir / "FAKE-Small_Patterns.txt")
+    ds = build_dataset(src, max_nodes=max_nodes, ratio=5, edge_tol=1, hops=2, window=timedelta(hours=24),
+                       max_tries=200, seed=seed)
+    return write_cache(ds.samples, out_dir / f"subgraphs_FAKE-Small_n{max_nodes}.parquet", usd_rates=src.usd_rates())
