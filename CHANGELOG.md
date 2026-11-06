@@ -28,6 +28,7 @@
 - Add the first real-hardware run: `results/HI-Small/garnet_20261106-030338.json` (Garnet, 19 qubits, 2 jobs, 122 circuits x 2,000 shots)
 - Complete the 5-minute deck `docs/slides/index.html` (issue #11): dataset, challenge (direction carries the label), circuit and its mechanisms, RZZ vs ZX ablation, learning curve, Garnet fit and hardware run, an honest summary, real-world use; detailed data slides moved to backup, with a leakage backup slide and timed speaker notes
 - Add `tests/test_slides.py`: every local file the deck links must exist, and the evidence figures must be on a slide
+- Restructure the deck `docs/slides/index.html` for clarity: data and findings (schema, payment format, amounts, laundering tail from `reports/HI-Small`), motifs and the option B decision (issue #1), graph-to-gate mapping with the gate table and why ZX instead of RZZ, the 9-stage pipeline, why the cap is 8 qubits (coverage, Garnet lattice, SWAP and CZ counts), and four "what we learnt" slides: gates, hardware shape, calibration, classical vs quantum accuracy and compute time
 - Add UNODC as [13] in `literature/README.md` (source of the 2–5 % of global GDP estimate)
 
 ## [0.0.1] — 2026-11-06

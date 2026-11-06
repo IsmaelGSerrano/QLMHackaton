@@ -7,7 +7,7 @@ Pages and design documents for the project. GitHub Pages serves this folder at
 
 | Page | Source | Published |
 |---|---|---|
-| **Laundering as directed motifs**: the 5-minute hackathon deck (reveal.js, no build step). Press `S` for speaker notes; add `?print-pdf` to the URL to export a PDF. | [`slides/index.html`](slides/index.html) | [GitHub Pages](https://ismaelgserrano.github.io/QLMHackaton/slides/) |
+| **Laundering as directed motifs**: the 5-minute hackathon deck (reveal.js, no build step): data and findings, motifs and the option B decision, graphs as gates (ZX vs RZZ), the pipeline, why 8 qubits, and four lessons (gates, hardware shape, calibration, classical vs quantum). Press `S` for speaker notes; add `?print-pdf` to the URL to export a PDF. | [`slides/index.html`](slides/index.html) | [GitHub Pages](https://ismaelgserrano.github.io/QLMHackaton/slides/) |
 
 ## HTML pages
 

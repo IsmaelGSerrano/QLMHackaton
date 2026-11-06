@@ -39,6 +39,26 @@
   .reveal td.num, .reveal th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .reveal tr.hl td { background: var(--pairs-bg); font-weight: 600; }
   .reveal .tight li { margin: .12em 0; }
+  .reveal .fig3 { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 1em; align-items: start; text-align: left; }
+  .reveal .fig3 img { width: 100%; margin: 0; border: 0; box-shadow: none; }
+  .reveal .fig3 p { font-size: .5em; margin: .3em 0 0; line-height: 1.3; }
+  .reveal .hd { font-size: .55em; font-weight: 600; text-align: left; margin: 0 0 .4em; }
+  .reveal .pipe { display: grid; grid-template-columns: repeat(9, 1fr); gap: .35em; text-align: left; }
+  .reveal .pipe .st { border-top: 5px solid var(--pairs); background: #f6f7f9; border-radius: 4px; padding: .35em .4em; font-size: .4em; line-height: 1.3; display: flex; flex-direction: column; gap: .25em; }
+  .reveal .pipe .st.s { border-color: #3b6fb6; } .reveal .pipe .st.h { border-color: var(--laund); }
+  .reveal .pipe .st b { font-size: 1.15em; } .reveal .pipe .st code { font-size: .9em; color: var(--muted); }
+  .reveal .pipe .st .n { font-weight: 600; color: var(--muted); }
+  .reveal .bars div, .reveal .lbars div { display: grid; grid-template-columns: 3em 1fr 3em; align-items: center; gap: .4em; font-size: .5em; margin: .35em 0; }
+  .reveal .lbars div { grid-template-columns: 10em 1fr 4.5em; }
+  .reveal .bars span, .reveal .lbars span { text-align: right; color: var(--muted); }
+  .reveal .bars i, .reveal .lbars i { display: block; height: 1.1em; background: var(--normal); border-radius: 2px; }
+  .reveal .bars div.on i { background: var(--pairs); } .reveal .bars div.on span, .reveal .bars div.on em { font-weight: 600; color: var(--ink); }
+  .reveal .lbars div.hw i { background: var(--laund); }
+  .reveal .bars em, .reveal .lbars em { font-style: normal; font-variant-numeric: tabular-nums; }
+  .reveal .lessons { display: grid; grid-template-columns: repeat(4, 1fr); gap: .8em; text-align: left; margin-top: 1em; }
+  .reveal .lessons div { border-top: 5px solid var(--pairs); background: var(--pairs-bg); border-radius: 4px; padding: .6em .7em; font-size: .62em; }
+  .reveal .lessons .n { display: block; font-size: 1.8em; font-weight: 600; color: var(--pairs); line-height: 1; margin-bottom: .2em; }
+  .reveal .lessons p { font-size: .85em; margin: .4em 0 0; color: var(--ink); }
 </style>
 </head>
 <body>
@@ -49,31 +69,136 @@
   <p class="kicker">ExtremeData4QML hackathon · IBM AML, HI-Small</p>
   <h1>Laundering as directed motifs</h1>
   <p class="muted">A direction-aware, permutation-equivariant quantum circuit on transaction subgraphs,<br>trained in simulation and run on IQM Garnet</p>
-  <aside class="notes">(10 s) Our argument starts from the data: laundering is a small directed pattern in a transaction graph. So the circuit is that pattern: one qubit per account, one directed gate per transfer.</aside>
+  <p class="src" style="margin-top:1.5em">Data → motifs → gates → pipeline → why 8 qubits → <b>what we learnt</b></p>
+  <aside class="notes">(5 s) We start from the data, show what laundering looks like in it, how we turn it into gates, how the pipeline runs, and then spend most of the time on what we learnt.</aside>
 </section>
 
 <!-- ======================================================================= -->
 <section>
-  <p class="kicker">1 · Dataset</p>
-  <h2>A directed, temporal multigraph with 0.1 % laundering</h2>
+  <p class="kicker">1 · The data</p>
+  <h2>A directed, temporal multigraph of bank transfers</h2>
   <div class="cols wide-right">
     <div>
-      <div class="stat"><div class="big">5.08 M</div><div class="lbl">transfers between 515 k accounts at 30.5 k banks, 18 days</div></div>
-      <div class="stat"><div class="big">87 %</div><div class="lbl">of transfers repeat an existing (payer, payee) pair: a multigraph</div></div>
-      <div class="stat"><div class="big laund">0.102 %</div><div class="lbl">laundering transfers, about 1 in 980</div></div>
-      <div class="stat"><div class="big">370</div><div class="lbl">labelled attempts in 8 motif types, each lasting 21–129 h on average</div></div>
+      <div class="stat"><div class="big">5.08 M</div><div class="lbl">transfers between 515 k accounts at 30.5 k banks, over 18 days</div></div>
+      <div class="stat"><div class="big laund">0.102 %</div><div class="lbl">are laundering: about 1 in 980</div></div>
+      <div class="stat"><div class="big">87 %</div><div class="lbl">repeat an existing (payer, payee) pair: a multigraph, 1.59 M distinct pairs</div></div>
+      <div class="stat"><div class="big">370</div><div class="lbl">ground-truth laundering attempts, labelled with 8 motif types</div></div>
     </div>
-    <img class="fig" src="../../reports/HI-Small/figures/motif_examples.png" alt="One ground-truth laundering attempt per motif type">
+    <img class="fig" src="../../reports/HI-Small/figures/schema.png" alt="Neo4j schema: Account nodes linked by TRANSFER (one edge per transaction) and SENDS_TO (one edge per pair), Bank and LaunderingAttempt nodes" style="max-height:430px">
   </div>
-  <p class="src">IBM AML HI-Small, Altman et al. [1]. Numbers from Neo4j: <a href="../../reports/HI-Small/README.md">reports/HI-Small</a>.</p>
-  <aside class="notes">(35 s) IBM's synthetic AML data, HI-Small. Five million transfers, one in a thousand is laundering. The dataset also ships the ground truth as 370 attempts with a motif label. Each picture is one real attempt: fan-out, fan-in, cycle, and so on. Three properties matter: edges are directed, they have timestamps, and the same pair transacts many times.</aside>
+  <p class="src">IBM AML HI-Small, Altman et al. [1]. All numbers are Cypher queries on the full graph in Neo4j: <a href="../../reports/HI-Small/README.md">reports/HI-Small</a>.</p>
+  <aside class="notes">(20 s) IBM's synthetic AML data, HI-Small. We loaded all five million transfers into Neo4j. Every account is a node, every transfer is a directed edge with a timestamp, amount and currency. Two views of the same edges: TRANSFER keeps every transaction, SENDS_TO collapses repeats into one weighted edge per pair. That second view is what becomes one gate per pair later. One in a thousand transfers is laundering, and 370 attempts come with a motif label.</aside>
 </section>
 
 <!-- ======================================================================= -->
 <section>
-  <p class="kicker">2 · Challenge</p>
-  <h2>The label is in the direction</h2>
-  <div class="cols">
+  <p class="kicker">1 · The data · what we found</p>
+  <h2>Laundering differs in channel, amount and time</h2>
+  <div class="fig3">
+    <div>
+      <div style="overflow:hidden"><img src="../../reports/HI-Small/figures/formats_and_motifs.png" alt="Laundering rate by payment format: ACH 0.75 %, others near 0; motif types balanced at 40 to 54 attempts" style="width:198%;max-width:none"></div>
+      <p><b>ACH carries 87 %</b> of laundering (7× the base rate). Wire and Reinvestment: none. <b>98 %</b> crosses banks.</p>
+    </div>
+    <div>
+      <img src="../../reports/HI-Small/figures/amounts.png" alt="USD amounts: laundering median 5,970 USD, legitimate median 908 USD">
+      <p>Laundering amounts: median <b>$5,970</b> vs $908, packed between $1k and $20k. Value is kept across hops and currencies.</p>
+    </div>
+    <div>
+      <img src="../../reports/HI-Small/figures/timeline.png" alt="Daily volume and laundering rate: after day 9 normal traffic stops and 59 % of the remaining transfers are laundering">
+      <p><b>Laundering tail:</b> normal traffic stops after day 9; days 10–17 are 59 % laundering. We use a temporal split and never feed time as a value.</p>
+    </div>
+  </div>
+  <div class="callout ok" style="margin-top:.5em">The signal is a relation <b>between</b> edges in a small subgraph, not a property of one transfer.</div>
+  <p class="src">Figures: <code>scripts/dataset_summary.py</code>, <a href="../../reports/HI-Small/README.md">reports/HI-Small/README.md</a>.</p>
+  <aside class="notes">(25 s) Three findings. First, laundering lives almost entirely in one payment channel, ACH, and nearly always crosses banks. Second, amounts sit in a narrow band around ten thousand dollars, and the value stays about the same hop after hop even when the currency changes. Third, a trap: normal traffic stops after day 9 and what is left is mostly laundering, so any model that sees time as a feature wins for free. We split by time and use time only to order gates. The common thread: the signal is how edges relate to each other in a small subgraph.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">2 · Motifs</p>
+  <h2>Laundering is a small directed shape</h2>
+  <div class="cols wide-right">
+    <ul class="tight" style="font-size:.74em">
+      <li><b>8 motif types</b>, 40–54 attempts each: FAN-OUT, FAN-IN, CYCLE, BIPARTITE, STACK, SCATTER-GATHER, GATHER-SCATTER, RANDOM</li>
+      <li><b>Small:</b> 5 accounts (CYCLE) to 16 on average (STACK), up to 45</li>
+      <li><b>Slow:</b> 21–129 h per attempt</li>
+      <li><b>Direction is the label:</b> FAN-OUT and FAN-IN are the same star with the arrows reversed</li>
+      <li><b>Not time-ordered:</b> in a real CYCLE, hop 4 happens before hop 3</li>
+    </ul>
+    <img class="fig" src="../../reports/HI-Small/figures/motif_examples.png" alt="One ground-truth laundering attempt per motif type" style="max-height:480px">
+  </div>
+  <p class="src">One real attempt per type from <code>HI-Small_Patterns.txt</code>; node number = qubit index. Egressy et al. [2]: plain message passing cannot detect some of these directed motifs.</p>
+  <aside class="notes">(15 s) Each picture is one real attempt, drawn as the subgraph a circuit will see. They are small, a handful of accounts, and the difference between two classes can be only the direction of the arrows. Egressy et al. prove that standard GNNs miss such patterns without direction-aware additions.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">2 · Motifs · the decision (issue #1)</p>
+  <h2>We chose option B: the circuit is the subgraph</h2>
+  <table style="font-size:.6em">
+    <thead><tr><th></th><th>A · motif features → quantum kernel</th><th class="pairs">B · ego-subgraph → equivariant circuit ✔</th></tr></thead>
+    <tbody>
+      <tr><td>Input</td><td>pattern counts per transaction, PCA to 4–16 numbers</td><td>a small directed subgraph, one qubit per account</td></tr>
+      <tr><td>Quantum idea</td><td>similarity in state space [10]</td><td>gates on the graph's edges; relabelling accounts only relabels qubits [9]</td></tr>
+      <tr><td>Data property used</td><td>imbalance</td><td><b>laundering = subgraph motifs</b></td></tr>
+      <tr><td>Expected benefit</td><td>a different kernel geometry, if any</td><td><b>symmetry built in → fewer labels needed</b>, with only ~200 training positives</td></tr>
+      <tr><td>Effort / novelty</td><td>lower / lower</td><td>higher / higher</td></tr>
+    </tbody>
+  </table>
+  <ul class="tight" style="font-size:.66em;text-align:left;margin-top:.6em">
+    <li>Option A's features stay as the <b>classical baseline</b>: XGBoost on 21 directed features of the <b>same</b> subgraphs</li>
+    <li>Settled with B: edge direction needs an asymmetric gate; negatives matched on size; noise breaks the symmetry, so we measure it</li>
+  </ul>
+  <aside class="notes">(20 s) We had two options. A: compress pattern counts into a quantum kernel. B: build the circuit from the subgraph itself, after Skolik et al. We took B because it is the only one whose structure follows from the data property: laundering is a motif, so the circuit is the motif. Permutation symmetry comes for free, which matters with only 200 training positives. Option A's features became our classical baseline on the same subgraphs.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">3 · Gates · graph → qubits</p>
+  <h2>One qubit per account, one gate per transfer</h2>
+  <div class="cols" style="grid-template-columns:.95fr 1.05fr">
+    <svg viewBox="0 0 560 300" role="img" aria-label="A FAN-OUT graph where A pays B, C and D, and its circuit: four wires, RY on each, three ZX gates from A to B, C, D in time order, then measurement">
+      <defs><marker id="ahm" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6"/></marker></defs>
+      <g stroke="#d85a30" stroke-width="2"><line x1="58" y1="140" x2="112" y2="66" marker-end="url(#ahm)"/><line x1="62" y1="150" x2="114" y2="150" marker-end="url(#ahm)"/><line x1="58" y1="160" x2="112" y2="234" marker-end="url(#ahm)"/></g>
+      <g fill="#fbece6" stroke="#d85a30" stroke-width="2"><circle cx="45" cy="150" r="16"/><circle cx="128" cy="55" r="16"/><circle cx="132" cy="150" r="16"/><circle cx="128" cy="245" r="16"/></g>
+      <g style="font-size:16px" text-anchor="middle" dominant-baseline="central" fill="#1f2933"><text x="45" y="150">A</text><text x="128" y="55">B</text><text x="132" y="150">C</text><text x="128" y="245">D</text></g>
+      <g style="font-size:13px" fill="#5f6b7a"><text x="70" y="92">t1</text><text x="84" y="142">t2</text><text x="70" y="214">t3</text></g>
+      <text x="185" y="156" style="font-size:26px" fill="#5f6b7a">→</text>
+      <g stroke="#5f6b7a" stroke-width="1.5"><line x1="235" y1="60" x2="550" y2="60"/><line x1="235" y1="125" x2="550" y2="125"/><line x1="235" y1="190" x2="550" y2="190"/><line x1="235" y1="255" x2="550" y2="255"/></g>
+      <g style="font-size:15px" text-anchor="end" fill="#1f2933"><text x="228" y="65">A</text><text x="228" y="130">B</text><text x="228" y="195">C</text><text x="228" y="260">D</text></g>
+      <g fill="#e1f5ee" stroke="#1d9e75" stroke-width="1.5"><rect x="245" y="45" width="40" height="30" rx="4"/><rect x="245" y="110" width="40" height="30" rx="4"/><rect x="245" y="175" width="40" height="30" rx="4"/><rect x="245" y="240" width="40" height="30" rx="4"/></g>
+      <g style="font-size:13px" text-anchor="middle" fill="#1f2933"><text x="265" y="65">RY</text><text x="265" y="130">RY</text><text x="265" y="195">RY</text><text x="265" y="260">RY</text></g>
+      <g stroke="#d85a30" stroke-width="2"><line x1="330" y1="60" x2="330" y2="125"/><line x1="390" y1="60" x2="390" y2="190"/><line x1="450" y1="60" x2="450" y2="255"/></g>
+      <g fill="#fbece6" stroke="#d85a30" stroke-width="2"><rect x="315" y="45" width="30" height="30" rx="4"/><rect x="315" y="110" width="30" height="30" rx="4"/><rect x="375" y="45" width="30" height="30" rx="4"/><rect x="375" y="175" width="30" height="30" rx="4"/><rect x="435" y="45" width="30" height="30" rx="4"/><rect x="435" y="240" width="30" height="30" rx="4"/></g>
+      <g style="font-size:15px" font-weight="600" text-anchor="middle" fill="#d85a30"><text x="330" y="66">Z</text><text x="330" y="131">X</text><text x="390" y="66">Z</text><text x="390" y="196">X</text><text x="450" y="66">Z</text><text x="450" y="261">X</text></g>
+      <g style="font-size:12px" text-anchor="middle" fill="#5f6b7a"><text x="330" y="292">t1</text><text x="390" y="292">t2</text><text x="450" y="292">t3</text></g>
+      <g fill="#fff" stroke="#1f2933" stroke-width="1.5"><rect x="495" y="45" width="40" height="30" rx="4"/><rect x="495" y="110" width="40" height="30" rx="4"/><rect x="495" y="175" width="40" height="30" rx="4"/><rect x="495" y="240" width="40" height="30" rx="4"/></g>
+      <g style="font-size:13px" text-anchor="middle" fill="#1f2933"><text x="515" y="65">⟨Z⟩</text><text x="515" y="130">⟨Z⟩</text><text x="515" y="195">⟨Z⟩</text><text x="515" y="260">⟨Z⟩</text></g>
+      <text x="390" y="24" style="font-size:13px" text-anchor="middle" fill="#d85a30">Z on the payer, X on the payee, in time order</text>
+    </svg>
+    <table style="font-size:.5em">
+      <thead><tr><th>Gate</th><th>Qubits</th><th>What it does</th><th>Used for</th></tr></thead>
+      <tbody>
+        <tr><td><b>RY(φ)</b></td><td>1</td><td>rotates between |0⟩ and |1⟩</td><td>account feature: log total flow</td></tr>
+        <tr><td><b>ZX(θ)</b></td><td>2</td><td>payer reads, payee turns: directed</td><td><span class="laund">one per merged transfer</span></td></tr>
+        <tr><td><b>RZZ(θ)</b></td><td>2</td><td>phase if the two agree: symmetric</td><td>ablation only (Skolik [9], Verdon [8])</td></tr>
+        <tr><td><b>RX(c)</b></td><td>1</td><td>rotates about X</td><td>mixer at the end of a layer</td></tr>
+        <tr><td><b>H</b></td><td>1</td><td>swaps X and Z (H X H = Z)</td><td>compiles ZX into ZZ</td></tr>
+        <tr><td><b>CZ</b></td><td>2</td><td>flips the sign of |11⟩</td><td>Garnet's only 2-qubit gate, neighbours only</td></tr>
+        <tr><td><b>PRX(φ, α)</b></td><td>1</td><td>rotation in the X–Y plane</td><td>Garnet's native 1-qubit gate</td></tr>
+        <tr><td><b>⟨Z⟩</b></td><td>1</td><td>P(0) − P(1), from +1 to −1</td><td>readout: mean over accounts</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="src">Mapping: account → qubit · merged transfer → 2-qubit gate · time → gate order · amount → angle · shared weights → any relabelling gives the same score [9].</p>
+  <aside class="notes">(25 s) The translation is mechanical. Each account is a wire. It starts with a rotation set by how much money flows through it. Each transfer, merged per pair, is a two-qubit gate between the payer's and payee's wires, applied in the order the money moved. At the end we measure every qubit and average. The table is the full gate vocabulary: the model gates, the ablation gate, and the two native gates Garnet actually runs.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">3 · Gates · why the non-symmetric one</p>
+  <h2>A symmetric gate erases the arrow</h2>
+  <div class="cols" style="grid-template-columns:.85fr 1.15fr;align-items:start">
     <svg viewBox="0 0 530 300" role="img" aria-label="FAN-OUT and FAN-IN have the same undirected star; CYCLE and the no-return triangle have the same undirected triangle">
       <defs><marker id="ah3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6"/></marker></defs>
       <g style="font-size:15px" font-weight="600" text-anchor="middle" fill="#1f2933"><text x="70" y="20">FAN-OUT</text><text x="200" y="20">FAN-IN</text><text x="340" y="20">CYCLE</text><text x="470" y="20">no return</text></g>
@@ -87,60 +212,82 @@
         <circle cx="200" cy="102" r="10"/><circle cx="200" cy="42" r="10"/><circle cx="258" cy="140" r="10"/><circle cx="142" cy="140" r="10"/>
         <circle cx="340" cy="42" r="10"/><circle cx="296" cy="140" r="10"/><circle cx="384" cy="140" r="10"/>
         <circle cx="470" cy="42" r="10"/><circle cx="426" cy="140" r="10"/><circle cx="514" cy="140" r="10"/></g>
-      <g style="font-size:14px" text-anchor="middle" fill="#5f6b7a"><text x="135" y="180">same undirected star</text><text x="405" y="180">same undirected triangle</text></g>
+      <g style="font-size:14px" text-anchor="middle" fill="#5f6b7a"><text x="135" y="180">RZZ sees: same star</text><text x="405" y="180">RZZ sees: same triangle</text></g>
       <g stroke="#888780" stroke-width="2"><line x1="135" y1="208" x2="135" y2="252"/><line x1="135" y1="252" x2="103" y2="282"/><line x1="135" y1="252" x2="167" y2="282"/>
         <line x1="405" y1="208" x2="380" y2="277"/><line x1="380" y1="277" x2="430" y2="277"/><line x1="430" y1="277" x2="405" y2="208"/></g>
       <g fill="#f1efe8" stroke="#888780" stroke-width="2"><circle cx="135" cy="252" r="8"/><circle cx="135" cy="208" r="8"/><circle cx="103" cy="282" r="8"/><circle cx="167" cy="282" r="8"/>
         <circle cx="405" cy="208" r="8"/><circle cx="380" cy="277" r="8"/><circle cx="430" cy="277" r="8"/></g>
     </svg>
-    <ul class="tight" style="font-size:.8em">
-      <li><b>Motifs:</b> laundering is a small subgraph pattern. Standard message passing misses these patterns; a model must use edge direction [2]</li>
-      <li><b>Imbalance:</b> 1 transfer in 980</li>
-      <li><b>Few labels:</b> 370 attempts; about 200 positives to train on after a temporal split</li>
+    <div class="cols" style="gap:.6em;align-items:start">
+      <div class="callout" style="font-size:.56em;border-color:var(--normal);background:#f4f3ef">
+        <b>RZZ · symmetric</b> (Skolik [9], Verdon [8])<br><code>exp(−iθ Z<sub>u</sub> Z<sub>v</sub>)</code>
+        <ul class="tight"><li>Both ends only read: a phase if the qubits agree</li><li>Swap the ends → <b>same gate</b>: A→B = B→A</li><li>All RZZ gates commute → timing is lost too</li></ul>
+      </div>
+      <div class="callout" style="font-size:.56em">
+        <b>ZX · directed</b> (our choice)<br><code>exp(−iθ Z<sub>payer</sub> X<sub>payee</sub>)</code>
+        <ul class="tight"><li>Payer |0⟩: payee turns by +2θ; payer |1⟩: by −2θ</li><li>Swap the ends → <b>a different gate</b></li><li>Does not commute at a mule (A→B→C) → apply in <b>timestamp order</b>, which never depends on account names</li></ul>
+      </div>
+    </div>
+  </div>
+  <div class="callout ok" style="font-size:.66em;margin-top:.4em"><b>Same price on Garnet:</b> ZX(θ) = H<sub>payee</sub> · ZZ(θ) · H<sub>payee</sub> → 2 CZ + PRX, exactly like RZZ. So the ablation compares the two gates at equal hardware cost.</div>
+  <p class="src">Design decision: <a href="../adr/0001-directed-edge-gates.md">ADR 0001</a>. Interactive version: <a href="../edge-direction.html">edge-direction.html</a>. We found no graph-QML paper with an asymmetric edge gate.</p>
+  <aside class="notes">(25 s) Why not the standard gate? RZZ, used by Skolik and Verdon, treats both ends the same. Flip every arrow of a fan-out and you get a fan-in, but the circuit does not change. The model does not fail to learn direction; direction never reaches it. ZX has two different ends: the payer acts as a switch, the payee gets turned. Reverse the arrow and the gate changes. The cost: directed gates do not commute when an account both receives and pays, so we need an order, and the timestamp is a fair one. And it is free on Garnet: ZX is ZZ with two Hadamards, two CZ either way.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">3 · Gates · evidence</p>
+  <h2>RZZ cannot see direction for any weights; ZX can</h2>
+  <div class="cols wide-left">
+    <img class="fig" src="../../results/figures/direction_ablation.png" alt="ZX separates FAN-IN from FAN-OUT and CYCLE from the no-return triangle; RZZ gives identical outputs" style="max-height:520px">
+    <div>
+      <ul class="tight" style="font-size:.76em">
+        <li>200 random parameter draws, noiseless, no training</li>
+        <li><b>RZZ:</b> FAN-IN = FAN-OUT and CYCLE = no-return triangle, <b>exactly</b> (|Δs| = 0 for every draw)</li>
+        <li><b>ZX:</b> median |Δs| = 0.23 and 0.07</li>
+      </ul>
+      <div class="callout ok" style="font-size:.66em">A property of the model class: no RZZ weights can separate these pairs.</div>
+    </div>
+  </div>
+  <p class="src">Figure: <code>scripts/direction_ablation.py</code>. Unit tests check equivariance (|Δ| &lt; 1e-10 under relabelling) and PennyLane / Qiskit parity.</p>
+  <aside class="notes">(15 s) Before any training: each dot is one random setting of the weights. With RZZ every dot sits on the diagonal, the two shapes score the same. With ZX they leave it. Direction is in the model class.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">4 · Pipeline</p>
+  <h2>From 5 million transfers to 120 circuits on Garnet</h2>
+  <div class="pipe">
+    <div class="st c"><span class="n">1</span><b>Load CSV</b><code>data.py</code><span>5,078,345 transfers, temporal order, stable edge id</span></div>
+    <div class="st c"><span class="n">2</span><b>Neo4j graph</b><code>graphdb.py</code><span>1.59 M merged pairs; subgraph queries in ms</span></div>
+    <div class="st c"><span class="n">3</span><b>Sample subgraphs</b><code>subgraphs.py</code><span>334 positives ≤ 8 accounts + 5 matched negatives each; 607 s</span></div>
+    <div class="st s"><span class="n">4</span><b>Merge edges</b><code>circuit.py</code><span>1 gate per pair: log(1+USD), count, first timestamp</span></div>
+    <div class="st s"><span class="n">5</span><b>Build circuit</b><code>circuit.py</code><span>RY · ZX in time order · RX · mean ⟨Z⟩; 7 weights</span></div>
+    <div class="st s"><span class="n">6</span><b>Train</b><code>qgnn.py</code><span>exact state vector + adjoint gradient; 5 seeds × 4 sizes in 369 s</span></div>
+    <div class="st h"><span class="n">7</span><b>Compile</b><code>garnet.py</code><span>VF2 layout, PRX + CZ; all 60 test graphs 0 SWAPs</span></div>
+    <div class="st h"><span class="n">8</span><b>Run + calibrate</b><code>run_garnet.py</code><span>120 circuits + 4 calibration, 2 jobs, 2,000 shots, 92 s</span></div>
+    <div class="st h"><span class="n">9</span><b>Score</b><code>garnet.py</code><span>⟨Z⟩ from counts; same circuits on 4 backends</span></div>
+  </div>
+  <div class="cols" style="grid-template-columns:1fr 1fr;margin-top:.5em;align-items:start">
+    <table style="font-size:.5em">
+      <thead><tr><th>Temporal split (n ≤ 8)</th><th class="num">positives</th><th class="num">negatives</th></tr></thead>
+      <tbody><tr><td>train: first 60 %</td><td class="num">199</td><td class="num">995</td></tr><tr><td>val: next 20 %</td><td class="num">65</td><td class="num">325</td></tr><tr><td>test: last 20 %</td><td class="num">70</td><td class="num">350</td></tr></tbody>
+    </table>
+    <ul class="tight" style="font-size:.52em;text-align:left;margin:0">
+      <li><b>Positive:</b> an attempt's accounts over its time window, normal transfers between them included. Bigger attempts are <b>cut in time</b> (171 cut)</li>
+      <li><b>Negatives:</b> laundering-free, same split, matched on account count (exact) and gate count (±1): 1,399 ego-nets + 271 "pairs"</li>
+      <li>Trained only on the simulator; Garnet runs <b>inference</b> with the 7 weights bound</li>
     </ul>
   </div>
-  <div class="callout">So we want a model whose <b>inductive bias</b> is "directed subgraph, any account labelling", with very few parameters [9].</div>
-  <aside class="notes">(35 s) FAN-OUT and FAN-IN are the same star if you forget direction. A cycle, where the money comes back, and a triangle where it does not, are the same triangle. Egressy et al. prove that standard message-passing GNNs miss such patterns, and that direction-aware additions (reverse message passing, port numbers, ego IDs) let a GNN detect any directed pattern. On top, labels are rare: about 200 training positives. Skolik et al. argue that building the graph symmetry into the circuit cuts the parameter count, which is what we want with few labels.</aside>
+  <p class="src"><span class="pairs">■</span> classical data · <span style="color:#3b6fb6">■</span> quantum model (simulated) · <span class="laund">■</span> IQM Garnet. Walkthrough: <a href="../pipeline.html">pipeline.html</a>.</p>
+  <aside class="notes">(25 s) Nine stages. Classical first: load the CSV, load it into Neo4j, sample labelled subgraphs of at most 8 accounts, each positive with five normal look-alikes of the same size so the model cannot win by counting. Then the quantum model: merge repeated transfers into one gate, build the circuit, train in exact simulation in about six minutes for the whole sweep. Then the hardware: compile to Garnet's native gates, run in two jobs with calibration circuits, and score the counts.</aside>
 </section>
 
 <!-- ======================================================================= -->
 <section>
-  <p class="kicker">Data</p>
-  <h2>From 5 M transactions to small graphs</h2>
-  <div class="cols">
-    <div>
-      <ul class="tight" style="font-size:.82em">
-        <li>Task: <b>graph classification</b>. Input: a small directed subgraph. Output: "contains a laundering attempt?"</li>
-        <li>One qubit per account: <b>≤ 8</b> for IQM Garnet, <b>≤ 12</b> in simulation</li>
-        <li>370 attempts fit without cutting: 196 at 8 accounts (53 %), 258 at 12 (70 %)</li>
-        <li>Larger attempts are <b>cut in time</b>: keep accounts in the order the money reaches them</li>
-        <li><b>5 negatives</b> per positive: normal subgraphs matched on accounts and gates, so size cannot give the label away</li>
-      </ul>
-    </div>
-    <svg viewBox="0 0 520 240" role="img" aria-label="An attempt cut in time at 4 accounts">
-      <defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6"/></marker></defs>
-      <line x1="58" y1="112" x2="136" y2="62" stroke="#d85a30" stroke-width="2" marker-end="url(#ah)"/>
-      <line x1="58" y1="128" x2="136" y2="178" stroke="#d85a30" stroke-width="2" marker-end="url(#ah)"/>
-      <line x1="168" y1="190" x2="246" y2="190" stroke="#d85a30" stroke-width="2" marker-end="url(#ah)"/>
-      <line x1="288" y1="190" x2="386" y2="190" stroke="#888780" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ah)"/>
-      <text x="82" y="78" style="font-size:15px" fill="#5f6b7a">t1</text><text x="82" y="172" style="font-size:15px" fill="#5f6b7a">t2</text>
-      <text x="200" y="180" style="font-size:15px" fill="#5f6b7a">t3</text><text x="330" y="180" style="font-size:15px" fill="#5f6b7a">t4</text>
-      <g fill="#fbece6" stroke="#d85a30" stroke-width="2"><circle cx="45" cy="120" r="15"/><circle cx="152" cy="52" r="15"/><circle cx="152" cy="190" r="15"/><circle cx="270" cy="190" r="15"/></g>
-      <circle cx="404" cy="190" r="15" fill="#fff" stroke="#888780" stroke-width="2" stroke-dasharray="4 3"/>
-      <g style="font-size:15px" text-anchor="middle" dominant-baseline="central" fill="#1f2933"><text x="45" y="120">A</text><text x="152" y="52">B</text><text x="152" y="190">C</text><text x="270" y="190">D</text><text x="404" y="190" fill="#888780">E</text></g>
-      <line x1="318" y1="30" x2="318" y2="225" stroke="#a86400" stroke-width="1.5" stroke-dasharray="6 4"/>
-      <text x="326" y="44" style="font-size:15px" fill="#a86400">cap: 4 accounts</text>
-    </svg>
-  </div>
-  <p class="src">Dataset: Altman et al. [1]. Counts measured on <code>HI-Small_Patterns.txt</code>. Cutting is subsampling.</p>
-  <aside class="notes">(35 s) A positive is the induced subgraph on an attempt's accounts over its time window, so normal background transfers between them are included. If the attempt has more accounts than qubits, we follow the money in time and stop at the cap: here E is dropped and the window ends at t3. Each positive gets 5 normal subgraphs with the same number of accounts and gates; otherwise any model could win by counting.</aside>
-</section>
-
-<!-- ======================================================================= -->
-<section>
-  <p class="kicker">3 · Quantum argument</p>
-  <h2>The circuit is the subgraph</h2>
-  <svg viewBox="0 0 1000 255" role="img" aria-label="Circuit on 3 accounts: RY node rotations, one ZX gate per transfer in timestamp order, RX mixer, mean of Z readouts" style="width:94%">
+  <p class="kicker">4 · Pipeline · the model</p>
+  <h2>Seven weights, whatever the graph size</h2>
+  <svg viewBox="0 0 1000 255" role="img" aria-label="Circuit on 3 accounts: RY node rotations, one ZX gate per transfer in timestamp order, RX mixer, mean of Z readouts" style="width:90%">
     <g stroke="#5f6b7a" stroke-width="1.5"><line x1="70" y1="50" x2="900" y2="50"/><line x1="70" y1="125" x2="900" y2="125"/><line x1="70" y1="200" x2="900" y2="200"/></g>
     <g style="font-size:18px" text-anchor="end" fill="#1f2933"><text x="58" y="56">A</text><text x="58" y="131">B</text><text x="58" y="206">C</text></g>
     <g fill="#e1f5ee" stroke="#1d9e75" stroke-width="1.5"><rect x="90" y="30" width="120" height="40" rx="4"/><rect x="90" y="105" width="120" height="40" rx="4"/><rect x="90" y="180" width="120" height="40" rx="4"/></g>
@@ -159,131 +306,262 @@
     <g style="font-size:15px" text-anchor="middle" fill="#1f2933"><text x="831" y="56">⟨Z⟩</text><text x="831" y="131">⟨Z⟩</text><text x="831" y="206">⟨Z⟩</text></g>
     <text x="915" y="131" style="font-size:16px" fill="#1f2933">mean</text>
   </svg>
-  <table style="font-size:.58em;margin-top:.3em">
+  <table style="font-size:.56em;margin-top:.3em">
     <thead><tr><th>Data property</th><th>Circuit choice</th><th>Mechanism</th></tr></thead>
     <tbody>
-      <tr><td>Account labels are arbitrary</td><td>shared weights, mean ⟨Z⟩ readout</td><td><b>permutation equivariance</b> [9]: 7 parameters for any graph size</td></tr>
-      <tr><td>Direction carries the label</td><td>ZX gate: Z on payer, X on payee</td><td>swapping the ends changes the gate; RZZ [8, 9] does not</td></tr>
-      <tr><td>Money moves in time</td><td>gates in timestamp order</td><td>ZX gates on a mule (pays and receives) do not commute; time does not depend on labels</td></tr>
-      <tr><td>Multigraph, heavy-tailed amounts</td><td>one gate per account pair, angle from log USD and count</td><td>shallow: 2 CZ per pair on Garnet</td></tr>
+      <tr><td>Account labels are arbitrary</td><td>shared weights a, b, w, v, c; mean ⟨Z⟩; readout α, β₀</td><td><b>permutation equivariance</b> [9]: 7 parameters for any size</td></tr>
+      <tr><td>Direction carries the label</td><td>ZX: Z on payer, X on payee</td><td>A→B ≠ B→A</td></tr>
+      <tr><td>Money moves in time</td><td>gates in timestamp order</td><td>order uses time, never account names</td></tr>
+      <tr><td>87 % of transfers repeat a pair; amounts are heavy-tailed</td><td>one gate per pair, angle from log USD and count</td><td>shallow: 2 CZ per pair, not per transfer</td></tr>
     </tbody>
   </table>
-  <aside class="notes">(50 s) One qubit per account. Each account gets a rotation from its total flow. Each transfer, merged per account pair, is one ZX gate: Z on the payer, X on the payee, in the order the money moved. The weights are shared by all nodes and all edges, and the readout is an average, so renaming the accounts cannot change the output. This is Skolik's equivariance argument, extended to direction. The result is a model with 7 parameters whatever the graph size. The ZX gate is our novelty: Skolik and Verdon use ZZ, which is symmetric. ZX costs the same on Garnet: 2 CZ. The design decision is in ADR 0001.</aside>
+  <aside class="notes">(15 s) The whole model on three accounts. Account rotation from total flow, one ZX gate per merged pair in time order, a mixer, and the mean of the readouts through a logistic. Five circuit weights and two readout weights, shared by every node and edge, so renaming accounts cannot change the score. Each row ties a circuit choice to a property of the data.</aside>
 </section>
 
 <!-- ======================================================================= -->
 <section>
-  <p class="kicker">3 · Quantum argument · evidence</p>
-  <h2>A symmetric gate cannot see direction; ZX can</h2>
-  <div class="cols wide-left">
-    <img class="fig" src="../../results/figures/direction_ablation.png" alt="ZX separates FAN-IN from FAN-OUT and CYCLE from the no-return triangle; RZZ gives identical outputs" style="max-height:540px">
+  <p class="kicker">5 · Why only 8 qubits</p>
+  <h2>The chip's shape sets the size, not its 20 qubits</h2>
+  <div class="cols" style="grid-template-columns:.8fr 1fr 1.05fr;align-items:start;gap:.8em">
     <div>
-      <ul class="tight" style="font-size:.78em">
-        <li>200 random parameter draws, noiseless</li>
-        <li><b>RZZ:</b> FAN-IN = FAN-OUT and CYCLE = no-return triangle, <b>exactly</b> (|Δs| = 0 for every draw)</li>
-        <li><b>ZX:</b> median |Δs| = 0.23 and 0.07</li>
-        <li>Same CZ cost on Garnet</li>
-      </ul>
-      <div class="callout ok" style="font-size:.68em">A property of the model class, not of training: no RZZ parameters can separate these pairs.</div>
+      <p class="hd">1 · Attempts that fit uncut (of 370)</p>
+      <div class="bars">
+        <div><span>≤ 4</span><i style="width:41%"></i><em>41 %</em></div>
+        <div class="on"><span>≤ 8</span><i style="width:53%"></i><em>53 %</em></div>
+        <div><span>≤ 12</span><i style="width:70%"></i><em>70 %</em></div>
+        <div><span>≤ 16</span><i style="width:82%"></i><em>82 %</em></div>
+        <div><span>≤ 20</span><i style="width:88%"></i><em>88 %</em></div>
+      </div>
+      <p class="src" style="text-align:left">Median size: CYCLE 4, FAN-OUT 8, FAN-IN 9, STACK and GATHER-SCATTER 15. Past 8, coverage grows slowly.</p>
     </div>
-  </div>
-  <p class="src">Figure: <code>scripts/direction_ablation.py</code>. Unit tests check equivariance (|Δ| &lt; 1e-10 under relabelling) and PennyLane / Qiskit parity.</p>
-  <aside class="notes">(30 s) Before any training. Each dot is one random parameter setting. With RZZ every dot sits on the diagonal: the circuit returns the same number for fan-in and fan-out, and for a cycle and a no-return triangle. With ZX the dots leave the diagonal. So direction is in the model class.</aside>
-</section>
-
-<!-- ======================================================================= -->
-<section>
-  <p class="kicker">4 · Prototype · simulator</p>
-  <h2>Direction helps with limited labels; the gap closes with all of them</h2>
-  <img class="fig" src="../../results/figures/qgnn_learning_curve.png" alt="Learning curve: test PR-AUC vs training fraction for zx-p1, zx-p2, rzz-p1 and xgb-subgraph" style="max-height:350px">
-  <table style="font-size:.56em">
-    <thead><tr><th>n ≤ 8, test PR-AUC, 5 seeds<br>training graphs (positives)</th><th class="num">10 %<br>120 (~20)</th><th class="num">25 %<br>299 (~50)</th><th class="num">50 %<br>598 (~100)</th><th class="num">100 %<br>1,194 (199)</th></tr></thead>
-    <tbody>
-      <tr><td>ZX − RZZ, paired bootstrap [95 % CI]</td><td class="num">+0.08 [+0.02, +0.14]</td><td class="num">+0.12 [+0.04, +0.18]</td><td class="num">+0.11 [+0.05, +0.17]</td><td class="num">+0.00 [−0.07, +0.07]</td></tr>
-    </tbody>
-  </table>
-  <p class="src">Random = 0.17 (1 : 5). Same subgraphs, temporal split, 7 trainable parameters (p = 1). Full table: <a href="../../results/figures/qgnn_learning_curve.md">qgnn_learning_curve.md</a>; minority F1 and recall at fixed FPR: <a href="../../results/README.md">results/README.md</a>.</p>
-  <aside class="notes">(35 s) Same data, same 7 parameters, only the edge gate differs. With 10 to 50 percent of the training data, that is 20 to 100 positives, ZX beats RZZ by about 0.1 PR-AUC, and the confidence interval excludes zero. Across seeds ZX wins 3 or 4 times out of 5. With all the data the gap closes: RZZ catches up through amounts and counts. At 12 qubits the effect is weaker. The black line is XGBoost on 21 hand-made directed features of the same subgraphs: much better. We do not claim to beat it.</aside>
-</section>
-
-<!-- ======================================================================= -->
-<section>
-  <p class="kicker">4 · Prototype · IQM Garnet</p>
-  <h2>The same model on a 20-qubit chip</h2>
-  <div class="cols" style="align-items:start">
     <div>
-      <p style="font-size:.58em;text-align:left;margin:0 0 .3em"><b>Fit on the lattice</b>: 420 test circuits, n ≤ 8</p>
-      <table style="font-size:.52em">
-        <thead><tr><th>motif</th><th class="num">0 SWAPs</th><th class="num">median CZ</th></tr></thead>
+      <p class="hd">2 · Garnet: square lattice, CZ to neighbours only</p>
+      <svg viewBox="0 0 284 272" role="img" aria-label="Garnet 20-qubit square lattice; a 5-account FAN-OUT placed on QB10 and its four neighbours; QB14 out of calibration" style="max-height:330px">
+<line x1="86" y1="24" x2="142" y2="24" stroke="#c4cad3" stroke-width="2"/>
+<line x1="86" y1="24" x2="86" y2="80" stroke="#c4cad3" stroke-width="2"/>
+<line x1="142" y1="24" x2="142" y2="80" stroke="#c4cad3" stroke-width="2"/>
+<line x1="30" y1="80" x2="86" y2="80" stroke="#c4cad3" stroke-width="2"/>
+<line x1="30" y1="80" x2="30" y2="136" stroke="#c4cad3" stroke-width="2"/>
+<line x1="86" y1="80" x2="142" y2="80" stroke="#c4cad3" stroke-width="2"/>
+<line x1="86" y1="80" x2="86" y2="136" stroke="#c4cad3" stroke-width="2"/>
+<line x1="142" y1="80" x2="198" y2="80" stroke="#c4cad3" stroke-width="2"/>
+<line x1="142" y1="80" x2="142" y2="136" stroke="#1d9e75" stroke-width="4"/>
+<line x1="198" y1="80" x2="254" y2="80" stroke="#c4cad3" stroke-width="2"/>
+<line x1="198" y1="80" x2="198" y2="136" stroke="#c4cad3" stroke-width="2"/>
+<line x1="254" y1="80" x2="254" y2="136" stroke="#c4cad3" stroke-width="2"/>
+<line x1="30" y1="136" x2="86" y2="136" stroke="#c4cad3" stroke-width="2"/>
+<line x1="30" y1="136" x2="30" y2="192" stroke="#c4cad3" stroke-width="2"/>
+<line x1="86" y1="136" x2="142" y2="136" stroke="#1d9e75" stroke-width="4"/>
+<line x1="86" y1="136" x2="86" y2="192" stroke="#c4cad3" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="142" y1="136" x2="198" y2="136" stroke="#1d9e75" stroke-width="4"/>
+<line x1="142" y1="136" x2="142" y2="192" stroke="#1d9e75" stroke-width="4"/>
+<line x1="198" y1="136" x2="254" y2="136" stroke="#c4cad3" stroke-width="2"/>
+<line x1="198" y1="136" x2="198" y2="192" stroke="#c4cad3" stroke-width="2"/>
+<line x1="254" y1="136" x2="254" y2="192" stroke="#c4cad3" stroke-width="2"/>
+<line x1="30" y1="192" x2="86" y2="192" stroke="#c4cad3" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="86" y1="192" x2="142" y2="192" stroke="#c4cad3" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="86" y1="192" x2="86" y2="248" stroke="#c4cad3" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="142" y1="192" x2="198" y2="192" stroke="#c4cad3" stroke-width="2"/>
+<line x1="142" y1="192" x2="142" y2="248" stroke="#c4cad3" stroke-width="2"/>
+<line x1="198" y1="192" x2="254" y2="192" stroke="#c4cad3" stroke-width="2"/>
+<line x1="198" y1="192" x2="198" y2="248" stroke="#c4cad3" stroke-width="2"/>
+<line x1="86" y1="248" x2="142" y2="248" stroke="#c4cad3" stroke-width="2"/>
+<line x1="142" y1="248" x2="198" y2="248" stroke="#c4cad3" stroke-width="2"/>
+<circle cx="86" cy="24" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="86" y="28" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB1</text>
+<circle cx="142" cy="24" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="142" y="28" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB2</text>
+<circle cx="30" cy="80" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="30" y="84" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB3</text>
+<circle cx="86" cy="80" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="86" y="84" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB4</text>
+<circle cx="142" cy="80" r="17" fill="#1d9e75" stroke="#1d9e75" stroke-width="1.5"/><text x="142" y="84" text-anchor="middle" style="font-size:11px" fill="#fff">QB5</text>
+<circle cx="198" cy="80" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="198" y="84" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB6</text>
+<circle cx="254" cy="80" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="254" y="84" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB7</text>
+<circle cx="30" cy="136" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="30" y="140" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB8</text>
+<circle cx="86" cy="136" r="17" fill="#1d9e75" stroke="#1d9e75" stroke-width="1.5"/><text x="86" y="140" text-anchor="middle" style="font-size:11px" fill="#fff">QB9</text>
+<circle cx="142" cy="136" r="17" fill="#1d9e75" stroke="#1d9e75" stroke-width="1.5"/><text x="142" y="140" text-anchor="middle" style="font-size:11px" fill="#fff">QB10</text>
+<circle cx="198" cy="136" r="17" fill="#1d9e75" stroke="#1d9e75" stroke-width="1.5"/><text x="198" y="140" text-anchor="middle" style="font-size:11px" fill="#fff">QB11</text>
+<circle cx="254" cy="136" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="254" y="140" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB12</text>
+<circle cx="30" cy="192" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="30" y="196" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB13</text>
+<circle cx="86" cy="192" r="17" fill="#fdf3dd" stroke="#a86400" stroke-dasharray="3 2" stroke-width="1.5"/><text x="86" y="196" text-anchor="middle" style="font-size:11px" fill="#a86400">QB14</text>
+<circle cx="142" cy="192" r="17" fill="#1d9e75" stroke="#1d9e75" stroke-width="1.5"/><text x="142" y="196" text-anchor="middle" style="font-size:11px" fill="#fff">QB15</text>
+<circle cx="198" cy="192" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="198" y="196" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB16</text>
+<circle cx="254" cy="192" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="254" y="196" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB17</text>
+<circle cx="86" cy="248" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="86" y="252" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB18</text>
+<circle cx="142" cy="248" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="142" y="252" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB19</text>
+<circle cx="198" cy="248" r="17" fill="#fff" stroke="#5f6b7a" stroke-width="1.5"/><text x="198" y="252" text-anchor="middle" style="font-size:11px" fill="#1f2933">QB20</text>
+      </svg>
+      <p class="src" style="text-align:left">≤ 4 neighbours per qubit, no triangles. A 5-account FAN-OUT fits on QB10 + 4 neighbours; a 6th recipient needs a SWAP (= 3 more CZ). QB14 was out of calibration on 2026-11-06.</p>
+    </div>
+    <div>
+      <p class="hd">3 · Fit and circuit size</p>
+      <table style="font-size:.48em">
+        <thead><tr><th>420 test circuits, n ≤ 8</th><th class="num">0 SWAPs</th><th class="num">median CZ</th></tr></thead>
         <tbody>
           <tr><td>BIPARTITE · STACK · RANDOM</td><td class="num">100 %</td><td class="num">2–6</td></tr>
           <tr><td>CYCLE</td><td class="num">83 %</td><td class="num">11.5</td></tr>
           <tr><td>SCATTER-GATHER</td><td class="num">57 %</td><td class="num">16</td></tr>
           <tr><td>FAN-IN · FAN-OUT</td><td class="num">25 %</td><td class="num">16–17</td></tr>
           <tr><td>GATHER-SCATTER</td><td class="num">9 %</td><td class="num">17</td></tr>
-          <tr class="hl"><td>all, incl. negatives</td><td class="num">69 %</td><td class="num">8</td></tr>
+          <tr class="hl"><td>all, n ≤ 8</td><td class="num">69 %</td><td class="num">8</td></tr>
+          <tr><td>all, n ≤ 12</td><td class="num">63 %</td><td class="num">12</td></tr>
         </tbody>
       </table>
-      <p class="src" style="text-align:left">Hubs with more than 4 neighbours need SWAPs on a square lattice.</p>
+      <ul class="tight" style="font-size:.5em;text-align:left;margin-top:.5em">
+        <li>Noise grows with CZ count: even at 8, Garnet is 0.022 off exact</li>
+        <li>Each test graph runs on <b>3 qubit sets</b> (equivariance check): 19 live qubits give many more 8-qubit placements</li>
+        <li><b>Not a simulator limit:</b> 2⁸ = 256 amplitudes; all 20 qubits ≈ 1 M, easy on a laptop</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">(30 s) Why eight? Three reasons. Coverage: eight accounts hold half the attempts uncut; going further adds little per qubit. Shape: Garnet is a square lattice, every qubit has at most four neighbours and there are no triangles, so a hub with five recipients or a three-account cycle needs SWAPs, and each SWAP is three more noisy CZ gates. Pairs and chains always fit, fans mostly do not. Size: at eight, 69 percent of circuits need no SWAP and the median is 8 CZ, and we have room for three relabelled copies on different qubits. It is not the simulator: 8 qubits is 256 numbers. We say clearly that the cap is subsampling.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section class="divider">
+  <p class="kicker">6 · What we learnt</p>
+  <h2 style="font-size:1.6em">Four lessons</h2>
+  <div class="lessons">
+    <div><span class="n">1</span><b>Gates and graphs</b><p>A graph becomes a circuit by rule; the gate decides what the model can see.</p></div>
+    <div><span class="n">2</span><b>Hardware shape</b><p>The coupling map, not the qubit count, limits the subgraph to 8 accounts.</p></div>
+    <div><span class="n">3</span><b>Calibration</b><p>The live chip is not the fake chip, and its qubits are not interchangeable.</p></div>
+    <div><span class="n">4</span><b>Classical vs quantum</b><p>Classical wins on accuracy and time at this size; the quantum value is the inductive bias.</p></div>
+  </div>
+  <aside class="notes">(5 s) Now the most important part: four things we learnt.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">6 · What we learnt · 1 / 4</p>
+  <h2>Gates: how a graph becomes qubits</h2>
+  <div class="cols" style="align-items:start">
+    <ul class="tight" style="font-size:.66em">
+      <li><b>The mapping is a rule, not a design per graph:</b> account → qubit, merged transfer → 2-qubit gate, timestamp → order, amount → angle. Any subgraph compiles with no hand work</li>
+      <li><b>The gate is the inductive bias.</b> RZZ makes direction invisible for every weight; ZX lets it in at the same 2-CZ cost</li>
+      <li><b>Directed gates bring a new problem: order.</b> They do not commute at a mule, so we need an order that ignores account names. Time gives one, and the equivariance tests pass (|Δ| &lt; 1e-10)</li>
+      <li><b>Multigraph → simple graph.</b> Merging repeats keeps 2 CZ per pair: 3 payments cost 2 CZ, not 6</li>
+      <li><b>Start state matters.</b> A payee in |+⟩ is unchanged by X, so RY must come first or ZX does nothing</li>
+    </ul>
+    <div>
+      <img class="fig" src="../../results/figures/qgnn_learning_curve.png" alt="Learning curve: test PR-AUC vs training fraction for zx-p1, zx-p2, rzz-p1 and xgb-subgraph" style="max-height:300px">
+      <table style="font-size:.48em">
+        <thead><tr><th>ZX − RZZ, test PR-AUC, n ≤ 8</th><th class="num">~20 pos.</th><th class="num">~50</th><th class="num">~100</th><th class="num">199</th></tr></thead>
+        <tbody><tr><td>paired bootstrap [95 % CI]</td><td class="num">+0.08 [+.02, +.14]</td><td class="num">+0.12 [+.04, +.18]</td><td class="num">+0.11 [+.05, +.17]</td><td class="num">+0.00 [−.07, +.07]</td></tr></tbody>
+      </table>
+      <p class="src">Direction helps when labels are scarce; with all of them RZZ catches up via amounts and counts. 5 seeds, random = 0.17. <a href="../../results/figures/qgnn_learning_curve.md">qgnn_learning_curve.md</a></p>
+    </div>
+  </div>
+  <aside class="notes">(25 s) First lesson: turning a graph into qubits is a rule, and the choice of two-qubit gate decides what the model can ever see. The symmetric gate loses direction exactly; the directed gate costs the same. But directed gates do not commute, so time order became part of the model. And merging repeats keeps circuits shallow. The payoff in training: with 20 to 100 positives, ZX beats RZZ by about 0.1 PR-AUC and the interval excludes zero. With all 199, the gap closes.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">6 · What we learnt · 2 / 4</p>
+  <h2>Hardware shape: why we stop at 8 qubits</h2>
+  <div class="cols" style="align-items:start">
+    <ul class="tight" style="font-size:.66em">
+      <li><b>Data graph ≠ hardware graph.</b> Our gates sit on the edges of the transaction graph; CZ exists only on Garnet's 30 couplers. Every mismatch is a SWAP, and every SWAP is 3 more CZ</li>
+      <li><b>Laundering shapes fit badly.</b> Hubs (FAN-IN/OUT, GATHER-SCATTER) need more than 4 neighbours: only 9–25 % fit with 0 SWAPs. Chains, pairs and stacks always fit</li>
+      <li><b>So the shape, not the 20 qubits, sets the budget.</b> At 8 accounts: 69 % of circuits need no SWAP, median 8 CZ, depth 4</li>
+      <li><b>The cap is subsampling.</b> 171 of 370 attempts are cut in time at 8 accounts; we report it</li>
+      <li><b>Platform limits too:</b> Resonance takes at most 100 circuits per job, so we split into 2 jobs, each with its own calibration</li>
+    </ul>
+    <div class="callout" style="font-size:.62em">
+      <b>What we would do next</b>
+      <ul class="tight">
+        <li>Choose the subgraph so that it embeds in the lattice (pick neighbours by coupling map)</li>
+        <li>Report SWAP count per motif as a result (done for n ≤ 8 and n ≤ 12)</li>
+        <li>On a chip with more connectivity, the same circuit runs larger with no change to the model</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">(20 s) Second lesson: the quantum chip has its own graph, and our circuit is drawn on the data's graph. Where they disagree, the compiler adds SWAPs, and SWAPs are noise. The worst fit is exactly the laundering hubs. So the real limit was the coupling map, not the number of qubits, and eight accounts was the size where most circuits run clean. That cap cuts 171 attempts, and we report it as subsampling.</aside>
+</section>
+
+<!-- ======================================================================= -->
+<section>
+  <p class="kicker">6 · What we learnt · 3 / 4</p>
+  <h2>Calibration: the live chip is not the fake chip</h2>
+  <div class="cols" style="align-items:start">
+    <div>
+      <ul class="tight" style="font-size:.6em">
+        <li><b>Chip calibration (IQM):</b> qubits drift over hours; IQM re-tunes them and switches off the ones that fail. On 2026-11-06 <b>QB14 was off and the rest were renumbered</b>: circuits sent by index would land on the wrong qubits. We map by name; 35 of 120 circuits were re-transpiled</li>
+        <li><b>Readout calibration (ours):</b> 2 circuits per job (all |0⟩, all |1⟩) give each qubit's error rates e0, e1:<br>
+          <code style="font-size:.9em">⟨Z⟩<sub>meas</sub> = (1 − e0 − e1)·⟨Z⟩<sub>true</sub> + (e1 − e0)</code><br>Errors shrink scores toward the middle, so classes look alike</li>
+        <li><b>It fixed the simulator, not the chip:</b> |score − exact| 0.014 → 0.008 on IQMFakeGarnet, 0.022 → 0.023 on Garnet. The chip's error is gate noise and qubit-to-qubit differences</li>
+      </ul>
     </div>
     <div>
-      <p style="font-size:.58em;text-align:left;margin:0 0 .3em"><b>Inference</b>: 60 test graphs (10 positive), 2,000 shots</p>
-      <table style="font-size:.52em">
-        <thead><tr><th>mode</th><th class="num">PR-AUC [95 % CI]</th><th class="num">relabel spread</th></tr></thead>
+      <table style="font-size:.5em">
+        <thead><tr><th>60 test graphs (10 pos.), 2,000 shots</th><th class="num">PR-AUC</th><th class="num">|score − exact|</th><th class="num">relabel spread</th></tr></thead>
         <tbody>
-          <tr><td>exact statevector</td><td class="num">0.732 [0.48, 0.95]</td><td class="num">0</td></tr>
-          <tr><td>noiseless, shots</td><td class="num">0.733</td><td class="num">0.007</td></tr>
-          <tr><td>IQMFakeGarnet</td><td class="num">0.734</td><td class="num">0.007</td></tr>
-          <tr class="hl"><td>Garnet (real chip)</td><td class="num">0.713 [0.45, 0.92]</td><td class="num">0.024</td></tr>
+          <tr><td>exact state vector</td><td class="num">0.732</td><td class="num">0</td><td class="num">0</td></tr>
+          <tr><td>noiseless, shots</td><td class="num">0.733</td><td class="num">0.004</td><td class="num">0.007</td></tr>
+          <tr><td>IQMFakeGarnet</td><td class="num">0.734</td><td class="num">0.014</td><td class="num">0.007</td></tr>
+          <tr class="hl"><td>Garnet (real chip)</td><td class="num">0.713</td><td class="num">0.022</td><td class="num">0.024</td></tr>
+          <tr><td>Garnet, readout-mitigated</td><td class="num">0.713</td><td class="num">0.023</td><td class="num">0.025</td></tr>
         </tbody>
       </table>
-      <p class="src" style="text-align:left">Relabel spread: mean score range over 20 graphs × 3 relabellings placed on different physical qubits.
-        Trained in simulation; 122 circuits in 2 jobs, 92 s.</p>
+      <div class="callout ok" style="font-size:.6em;margin-top:.6em">No detectable loss on hardware (CI 0.45–0.92 vs 0.48–0.95). But the <b>same graph on other qubits scores 3.4× more differently</b> than shot noise allows: device noise breaks equivariance, and the noise model does not predict it.</div>
+      <p class="src"><a href="../../results/hardware/wp6_garnet_summary.md">wp6_garnet_summary.md</a> · one run, one seed, one calibration day; 0-SWAP graphs only.</p>
     </div>
   </div>
-  <div class="callout ok" style="font-size:.66em">No detectable loss on hardware. Device noise breaks equivariance at 3.4× the shot-noise floor, and the noise model does not predict it (one run, one calibration day).</div>
-  <p class="src"><a href="../../results/hardware/wp6_garnet_summary.md">wp6_garnet_summary.md</a> · The run used 0-SWAP graphs, so compare its rows with each other, not with the full test split. With 10 positives, F1 and recall at fixed FPR are not informative; they are in the summary.</p>
-  <aside class="notes">(35 s) Two thirds of the circuits fit Garnet's square lattice with no SWAP. Pairs and chains always fit; fan hubs with more than 4 neighbours do not. We trained in simulation and ran only inference on the real chip: PR-AUC 0.71 against 0.73 exact. The intervals overlap, and there are only 10 positives, so this is "no detectable loss", not "equal". The interesting number is the right column. In theory the same graph on different qubits gives the same score. On Garnet the scores vary 3.4 times more than shot noise, and the fake-Garnet noise model misses that.</aside>
+  <aside class="notes">(25 s) Third lesson: calibration. The real chip changes daily. That morning one qubit was switched off and the others renumbered, so a circuit compiled for the simulator would have run on the wrong qubits. We now map qubits by name. We also added our own readout calibration in every job. It halved the error of the noise model but did nothing on the real chip, because the real error is gate noise and differences between qubits. The model survived: 0.71 against 0.73 exact. But placing the same graph on different qubits changes the score 3.4 times more than shot noise, and the fake noise model misses that completely.</aside>
 </section>
 
 <!-- ======================================================================= -->
 <section>
-  <p class="kicker">4 · Prototype · what it shows</p>
-  <h2>Honest summary</h2>
+  <p class="kicker">6 · What we learnt · 4 / 4</p>
+  <h2>Classical vs quantum: accuracy and time</h2>
   <div class="cols" style="align-items:start">
-    <div class="callout ok" style="font-size:.7em">
-      <b>Shown</b>
-      <ul class="tight">
-        <li>Direction is inside the model class (exact ablation)</li>
-        <li>With few labels, ZX beats RZZ by about 0.1 PR-AUC (CI excludes 0)</li>
-        <li>7 parameters for any subgraph size (equivariance [9])</li>
-        <li>Runs on Garnet with no detectable loss; 69 % of circuits need 0 SWAPs</li>
-      </ul>
+    <div>
+      <p class="hd">Score the 120 hardware circuits (2,000 shots), log scale</p>
+      <div class="lbars">
+        <div><span>exact state vector</span><i style="width:4%"></i><em>≈ 0.15 s</em></div>
+        <div><span>Aer, noiseless shots</span><i style="width:33%"></i><em>2.1 s</em></div>
+        <div><span>IQMFakeGarnet</span><i style="width:49%"></i><em>9.5 s</em></div>
+        <div class="hw"><span>real Garnet, 2 jobs</span><i style="width:74%"></i><em>92.1 s</em></div>
+      </div>
+      <table style="font-size:.48em;margin-top:.7em">
+        <thead><tr><th>One training epoch, n ≤ 8 (1,194 graphs)</th><th class="num">time</th></tr></thead>
+        <tbody>
+          <tr><td>laptop simulator, exact + adjoint gradient</td><td class="num">≈ 3.3 s</td></tr>
+          <tr><td>Garnet, parameter shift (≈ 58,500 circuits, ≈ 600 jobs)</td><td class="num">≈ 12 h, ≈ 21,700 credits</td></tr>
+          <tr><td>XGBoost fit, 21 features (whole model)</td><td class="num">≈ 0.1 s</td></tr>
+        </tbody>
+      </table>
+      <p class="src" style="text-align:left">Garnet 92.1 s is recorded wall time (queue 0). The training cost is an extrapolation, not run.</p>
     </div>
-    <div class="callout" style="font-size:.7em">
-      <b>Not shown</b>
-      <ul class="tight">
-        <li>Any advantage over classical: XGBoost on directed subgraph features reaches 0.96 PR-AUC, the circuit 0.70</li>
-        <li>That the circuit is hard to simulate: ≤ 12 qubits, statevector</li>
-        <li>That the quantum feature space differs from a classical one: next step, geometric difference [10]</li>
-      </ul>
+    <div>
+      <table style="font-size:.54em">
+        <thead><tr><th>Test PR-AUC, n ≤ 8, all labels</th><th class="num">value</th></tr></thead>
+        <tbody>
+          <tr class="hl"><td>XGBoost on 21 directed subgraph features</td><td class="num">0.964</td></tr>
+          <tr><td>ZX circuit, 7 parameters (zx-p1)</td><td class="num">0.695</td></tr>
+          <tr><td>RZZ circuit (ablation)</td><td class="num">0.692</td></tr>
+          <tr><td>random (1 : 5)</td><td class="num">0.17</td></tr>
+        </tbody>
+      </table>
+      <div class="callout" style="font-size:.6em;margin-top:.6em">
+        <b>Not shown:</b> any advantage over classical. At 8–12 qubits the circuit is easy to simulate, so no speed claim is possible, and hand-made directed features win by 0.27.
+      </div>
+      <div class="callout ok" style="font-size:.6em;margin-top:.4em">
+        <b>Shown:</b> the inductive bias works as designed (direction in the model class, 7 weights, helps with few labels) and survives real hardware. Next test: geometric difference [10], to ask if this feature space can beat every classical kernel on this data.
+      </div>
     </div>
   </div>
-  <aside class="notes">(20 s) What we can defend: the inductive bias works as designed and survives real hardware. What we cannot: XGBoost with hand-made directed features is far better, and at 12 qubits nothing here is classically hard. The right next test is the geometric difference of Huang et al., which tells whether this quantum feature space can beat every classical kernel on this data.</aside>
+  <aside class="notes">(25 s) Last lesson, and the honest one. Time: scoring 120 circuits takes a fraction of a second in exact simulation and 92 seconds on the chip. One training epoch is 3 seconds on a laptop and would be about 12 hours and 21 thousand credits on Garnet; that is why we trained in simulation. Accuracy: XGBoost on directed features of the same subgraphs reaches 0.96, our circuit 0.70. So no quantum advantage at this size, and we do not claim one. What we can defend is the mechanism: direction is in the model class, the symmetry keeps it at 7 weights, it helps with few labels, and it survives a real chip. Thank you.</aside>
 </section>
 
 <!-- ======================================================================= -->
 <section>
-  <p class="kicker">5 · Real world</p>
+  <p class="kicker">Real world</p>
   <h2>Any directed flow network has motifs</h2>
-  <ul style="text-align:left">
+  <ul style="text-align:left;font-size:.85em">
     <li><b>Anti-money laundering:</b> an estimated 2–5 % of global GDP is laundered each year [13]</li>
     <li><b>Fraud rings and mule networks:</b> money fans in and out through mule accounts</li>
     <li><b>Crypto:</b> the same graph-ML task on real Bitcoin transactions [4]</li>
     <li><b>Payments, supply chains:</b> cycles and scatter-gather in directed, time-stamped flows</li>
   </ul>
   <div class="callout ok">The recipe carries over: <b>qubit = node, ZX gate = directed edge, gate order = time, shared weights = symmetry.</b></div>
-  <aside class="notes">(15 s) The UN estimates that 2 to 5 percent of world GDP is laundered every year. The same structure, directed edges with time and repeated pairs, appears in fraud rings, mule networks, payments and supply chains. The circuit recipe needs no change. Thank you.</aside>
+  <aside class="notes">(only if time) The same structure appears in fraud rings, mule networks, payments and supply chains. The circuit recipe needs no change.</aside>
 </section>
 
 <!-- ======================================================================= -->
