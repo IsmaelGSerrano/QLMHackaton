@@ -29,7 +29,7 @@ from qlmaml.circuit import CircuitGraph, EdgeGate, build_gates, graph_from_merge
 
 LEARNING_CURVE = (0.1, 0.25, 0.5, 1.0)
 # The WP3 models: name -> (edge gate, layers). rzz-p1 is the direction ablation.
-MODELS: dict[str, tuple[EdgeGate, int]] = {"zx-p1": ("zx", 1), "zx-p2": ("zx", 2), "rzz-p1": ("rzz", 1)}
+MODELS: dict[str, tuple[EdgeGate, int]] = {"zx-p1": ("zx", 1), "zx-p2": ("zx", 2), "rzz-p1": ("rzz", 1), "cry-p1": ("cry", 1)}
 
 
 def nested_subsamples(labels, fractions: Sequence[float] = LEARNING_CURVE, seed: int = 0) -> dict[float, np.ndarray]:
